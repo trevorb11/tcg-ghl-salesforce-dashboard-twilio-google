@@ -1,0 +1,39 @@
+There are two separate systems built for remote Claude access. Here's the full spec for both:
+
+1. Claude Admin Data API (REST)
+Base URL: https://app.todaycapitalgroup.com
+Auth: Header X-Claude-API-Key: <value of CLAUDE_API_KEY env var>
+
+Method	Endpoint	Description
+GET	/api/admin/claude/ping	Auth test — confirms the key works
+GET	/api/admin/claude/context	Full system context: schema descriptions, table row counts, business logic summary, all endpoint docs
+GET	/api/admin/claude/table/:tableName	Read any table. Params: limit (max 500), offset, orderBy, order, search
+POST	/api/admin/claude/sql	Run a read-only SELECT/WITH/EXPLAIN query. Body: { query, params[] }
+POST	/api/admin/claude/mutate	Run an UPDATE/INSERT/DELETE. Body: { sql, params[] }. DDL blocked.
+POST	/api/admin/claude/upsert/:tableName	Convenience update. Body: { where: {col: val}, set: {col: val} }
+Readable tables: loan_applications, business_underwriting_decisions, bank_statement_uploads, lender_approvals, lenders, partners, merchant_messages, merchant_portal_accounts, merchant_financial_insights, merchant_plaid_connections, plaid_items, plaid_statements, funding_analyses, congratulations_uploads, visit_logs, bot_attempts, system_settings, users
+
+Writable tables: loan_applications, business_underwriting_decisions, bank_statement_uploads, lender_approvals, lenders, partners, merchant_messages, merchant_financial_insights, system_settings
+
+2. MCP Server (Claude Desktop / SSE)
+Auth: Header Authorization: Bearer <value of MCP_API_KEY env var> (or ?key= query param)
+
+Method	Endpoint	Description
+GET	/api/mcp/health	No auth required. Health check.
+GET	/api/mcp	SSE connection endpoint — Claude Desktop connects here
+POST	/api/mcp/message?sessionId=...	Message endpoint — Claude posts messages here after connecting
+MCP Tools exposed:
+
+list_loan_applications — list/search/filter all applications
+get_loan_application — fetch single app by ID or email
+update_loan_application_status — update status + notes
+list_lender_approvals — list/filter approvals
+get_lender_approval — fetch single approval by ID or business name
+list_bank_statement_uploads — list uploads, filter by email
+get_database_stats — counts across all key tables
+ghl_search_contact — find a GHL contact by email/phone/business
+ghl_get_opportunities — get deals for a GHL contact
+ghl_get_opportunity — get a single GHL opportunity
+ghl_update_opportunity — update custom fields on a GHL opportunity
+ghl_sync_approval_to_opportunity — sync a DB approval record into GHL
+Two separate API keys are needed — CLAUDE_API_KEY for the REST admin API and MCP_API_KEY for the MCP server. Both are environment secrets in the project.

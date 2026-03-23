@@ -1,0 +1,8 @@
+# Credentials and secrets
+API_Credentials.env.txt
+*.env
+*.env.*
+
+# OS files
+.DS_Store
+Thumbs.db
