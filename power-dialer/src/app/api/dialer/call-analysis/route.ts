@@ -3,7 +3,7 @@
 // Fetches transcript from Twilio, runs Claude analysis, pushes note to GHL.
 
 import { NextRequest, NextResponse } from "next/server";
-import { sessions } from "@/lib/types";
+import { getSession, saveSession, deleteSession } from "@/lib/session-store";
 import { analyzeCallTranscript } from "@/lib/claude";
 import { addContactNote } from "@/lib/ghl";
 import { getClient, getTwilioClient, getActiveCarrier } from "@/lib/carrier";
@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
 
   const { sessionId, callId } = await req.json();
 
-  const session = sessions.get(sessionId);
+  const session = await getSession(sessionId);
   if (!session) {
     return NextResponse.json({ error: "Session not found" }, { status: 404 });
   }
@@ -102,6 +102,7 @@ export async function POST(req: NextRequest) {
       console.error("Failed to push note to GHL:", ghlErr);
     }
 
+    await saveSession(session);
     return NextResponse.json({ analysis });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Analysis failed";
@@ -122,7 +123,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "sessionId and callId required" }, { status: 400 });
   }
 
-  const session = sessions.get(sessionId);
+  const session = await getSession(sessionId);
   if (!session) {
     return NextResponse.json({ error: "Session not found" }, { status: 404 });
   }

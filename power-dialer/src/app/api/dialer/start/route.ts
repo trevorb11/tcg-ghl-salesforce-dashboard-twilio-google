@@ -13,7 +13,8 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { callRepIntoConference, callWebRTCClientIntoConference, generateWebRTCToken, getActiveCarrier } from "@/lib/carrier";
-import { sessions, type DialerSession, type DialMode, type Lead } from "@/lib/types";
+import { type DialerSession, type DialMode, type Lead } from "@/lib/types";
+import { getSession, saveSession, deleteSession } from "@/lib/session-store";
 import { requireAuth } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
@@ -73,7 +74,7 @@ export async function POST(req: NextRequest) {
     totalConnected: 0,
   };
 
-  sessions.set(sessionId, session);
+  await saveSession(session);
 
   try {
     if (connMode === "webrtc") {
@@ -116,7 +117,7 @@ export async function POST(req: NextRequest) {
       message: `Calling ${repName || repId} at ${repPhone}. Answer to join the dialer. Mode: ${mode === "multi" ? `multi-line (${lineCount} lines)` : "single-line"}.`,
     });
   } catch (err: unknown) {
-    sessions.delete(sessionId);
+    await deleteSession(sessionId);
     const message = err instanceof Error ? err.message : "Unknown error";
     console.error("Failed to start session:", message);
     return NextResponse.json({ error: message }, { status: 500 });

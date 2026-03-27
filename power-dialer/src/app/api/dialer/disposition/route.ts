@@ -1,7 +1,8 @@
 // POST /api/dialer/disposition — Set disposition for the current/last call
 
 import { NextRequest, NextResponse } from "next/server";
-import { sessions, type Disposition } from "@/lib/types";
+import { type Disposition } from "@/lib/types";
+import { getSession, saveSession, deleteSession } from "@/lib/session-store";
 import { addContactNote } from "@/lib/ghl";
 import { requireAuth } from "@/lib/auth";
 
@@ -25,7 +26,7 @@ export async function POST(req: NextRequest) {
     notes?: string;
   };
 
-  const session = sessions.get(sessionId);
+  const session = await getSession(sessionId);
   if (!session) {
     return NextResponse.json({ error: "Session not found" }, { status: 404 });
   }
@@ -64,6 +65,7 @@ export async function POST(req: NextRequest) {
     // Don't fail the disposition — GHL sync is best-effort in Phase 1
   }
 
+  await saveSession(session);
   return NextResponse.json({
     success: true,
     callId: lastCall.id,

@@ -2,7 +2,7 @@
 // Called when a conference recording is ready. Triggers transcription + AI analysis.
 
 import { NextRequest, NextResponse } from "next/server";
-import { sessions } from "@/lib/types";
+import { getSession, saveSession, deleteSession } from "@/lib/session-store";
 import { getActiveCarrier } from "@/lib/carrier";
 
 export async function POST(req: NextRequest) {
@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const session = sessions.get(sessionId);
+  const session = await getSession(sessionId);
   if (!session) {
     console.error(`Session ${sessionId} not found for recording ${recordingSid}`);
     return new NextResponse("<Response/>", {
@@ -49,6 +49,8 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  if (session) await saveSession(session);
+
   return new NextResponse("<Response/>", {
     headers: { "Content-Type": "text/xml" },
   });
@@ -62,7 +64,7 @@ async function storeRecordingRef(
   sessionId: string,
   callId: string
 ) {
-  const session = sessions.get(sessionId);
+  const session = await getSession(sessionId);
   if (session) {
     const call = session.callLog.find((c) => c.id === callId);
     if (call) {

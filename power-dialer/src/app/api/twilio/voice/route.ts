@@ -41,6 +41,23 @@ function generateTwiML(action: string, conferenceName: string, role: string, ses
 </Response>`;
   }
 
+  // Voicemail drop — plays a pre-recorded message and hangs up
+  if (action === "voicemail_drop") {
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Pause length="1"/>
+  <Say voice="Polly.Matthew" language="en-US">
+    Hi, this is a quick message from Today Capital Group.
+    We help business owners access working capital quickly and easily.
+    If you have a moment, we'd love to chat about how we can help your business grow.
+    Feel free to give us a call back at your convenience.
+    Have a great day!
+  </Say>
+  <Pause length="1"/>
+  <Hangup/>
+</Response>`;
+  }
+
   // Fallback — just say something
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>

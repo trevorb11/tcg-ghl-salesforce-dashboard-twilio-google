@@ -7,7 +7,8 @@
 // connected to exactly one lead at a time.
 
 import { NextRequest, NextResponse } from "next/server";
-import { sessions, type CallStatus } from "@/lib/types";
+import { type CallStatus } from "@/lib/types";
+import { getSession, saveSession, deleteSession } from "@/lib/session-store";
 import { hangupCall } from "@/lib/carrier";
 
 export async function POST(req: NextRequest) {
@@ -22,7 +23,7 @@ export async function POST(req: NextRequest) {
 
   // If this is a lead call status update, update the session
   if (sessionId && leadId) {
-    const session = sessions.get(sessionId);
+    const session = await getSession(sessionId);
     if (session) {
       const callRecord = session.callLog.find((c) => c.twilioCallSid === callSid);
       if (callRecord) {
@@ -135,6 +136,8 @@ export async function POST(req: NextRequest) {
           }
         }
       }
+      // Persist session state after mutations
+      await saveSession(session);
     }
   }
 

@@ -2,7 +2,7 @@
 // Called when rep ends their session or requests a summary.
 
 import { NextRequest, NextResponse } from "next/server";
-import { sessions } from "@/lib/types";
+import { getSession, saveSession, deleteSession } from "@/lib/session-store";
 import { generateDailySummary } from "@/lib/claude";
 import { requireAuth } from "@/lib/auth";
 
@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
 
   const { sessionId } = await req.json();
 
-  const session = sessions.get(sessionId);
+  const session = await getSession(sessionId);
   if (!session) {
     return NextResponse.json({ error: "Session not found" }, { status: 404 });
   }
@@ -44,6 +44,7 @@ export async function POST(req: NextRequest) {
   try {
     const summary = await generateDailySummary(allCalls);
 
+    await saveSession(session);
     return NextResponse.json({
       ...summary,
       sessionStats: {

@@ -6,7 +6,8 @@
 // gives visibility into parallel dialing state.
 
 import { NextRequest, NextResponse } from "next/server";
-import { sessions, type Lead } from "@/lib/types";
+import { type Lead } from "@/lib/types";
+import { getSession } from "@/lib/session-store";
 import { requireAuth } from "@/lib/auth";
 
 export async function GET(req: NextRequest) {
@@ -18,25 +19,21 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "sessionId required" }, { status: 400 });
   }
 
-  const session = sessions.get(sessionId);
+  const session = await getSession(sessionId);
   if (!session) {
     return NextResponse.json({ error: "Session not found" }, { status: 404 });
   }
 
-  // In multi-line mode, the "current lead" is whoever actually connected
-  // (the batch winner), not just the last lead index.
-  let currentLead = null;
-
   // Helper to serialize a lead with all CRM context fields
   function serializeLead(lead: Lead) {
     return {
+      id: lead.id,
       name: lead.name,
       businessName: lead.businessName,
       phone: lead.phone,
       email: lead.email,
       stageName: lead.stageName,
       tags: lead.tags,
-      // Extended CRM fields for LeadContextCard
       _monthlyRevenue: lead._monthlyRevenue,
       _industry: lead._industry,
       _yearsInBusiness: lead._yearsInBusiness,
@@ -52,30 +49,29 @@ export async function GET(req: NextRequest) {
     };
   }
 
+  // Determine current lead
+  let currentLead = null;
   if (session.dialMode === "multi" && session.currentBatch?.connectedLeadIndex != null) {
     const connectedLead = session.leads[session.currentBatch.connectedLeadIndex];
-    if (connectedLead) {
-      currentLead = serializeLead(connectedLead);
-    }
+    if (connectedLead) currentLead = serializeLead(connectedLead);
   } else if (session.currentLeadIndex >= 0 && session.currentLeadIndex < session.leads.length) {
     currentLead = serializeLead(session.leads[session.currentLeadIndex]);
   }
 
   const lastCall = session.callLog[session.callLog.length - 1] || null;
-
-  // In multi-line, find the actual connected call (not just the last one logged)
   const connectedCall = session.currentBatch?.connectedSid
     ? session.callLog.find((c) => c.twilioCallSid === session.currentBatch?.connectedSid)
     : lastCall;
 
   // Batch info for multi-line visibility
-  const batchInfo = session.dialMode === "multi" && session.currentBatch
-    ? {
-        linesDialed: session.currentBatch.callSids.length,
-        connected: !!session.currentBatch.connectedSid,
-        settled: session.currentBatch.settled,
-      }
-    : null;
+  const batchInfo =
+    session.dialMode === "multi" && session.currentBatch
+      ? {
+          linesDialed: session.currentBatch.callSids.length,
+          connected: !!session.currentBatch.connectedSid,
+          settled: session.currentBatch.settled,
+        }
+      : null;
 
   return NextResponse.json({
     sessionId: session.id,
@@ -99,11 +95,12 @@ export async function GET(req: NextRequest) {
       leadName: c.leadName,
       leadBusinessName: c.leadBusinessName,
       status: c.status,
-      disposition: c.disposition,
-      duration: c.duration,
+      disposition: c.disposition || null,
+      duration: c.duration || null,
       startedAt: c.startedAt,
-      notes: c.notes,
       analysis: c.analysis || null,
+      recordingUrl: c.recordingUrl || null,
+      recordingSid: c.recordingSid || null,
     })),
   });
 }

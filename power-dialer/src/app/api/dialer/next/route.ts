@@ -7,7 +7,8 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { dialLeadIntoConference, callWebRTCClientIntoConference, getActiveCarrier } from "@/lib/carrier";
-import { sessions, type CallRecord } from "@/lib/types";
+import { type CallRecord } from "@/lib/types";
+import { getSession, saveSession, deleteSession } from "@/lib/session-store";
 import { requireAuth } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
@@ -16,7 +17,7 @@ export async function POST(req: NextRequest) {
 
   const { sessionId } = await req.json();
 
-  const session = sessions.get(sessionId);
+  const session = await getSession(sessionId);
   if (!session) {
     return NextResponse.json({ error: "Session not found" }, { status: 404 });
   }
@@ -47,6 +48,7 @@ export async function POST(req: NextRequest) {
     if (session.currentLeadIndex >= session.leads.length) {
       session.status = "ended";
       session.endedAt = new Date().toISOString();
+      await saveSession(session);
       return NextResponse.json({
         done: true,
         message: "All leads have been dialed.",
@@ -80,6 +82,7 @@ export async function POST(req: NextRequest) {
 
       session.callLog.push(record);
 
+      await saveSession(session);
       return NextResponse.json({
         dialing: true,
         dialMode: "single",
@@ -115,6 +118,7 @@ export async function POST(req: NextRequest) {
   if (batchLeads.length === 0) {
     session.status = "ended";
     session.endedAt = new Date().toISOString();
+    await saveSession(session);
     return NextResponse.json({
       done: true,
       message: "All leads have been dialed.",
@@ -170,6 +174,7 @@ export async function POST(req: NextRequest) {
     settled: false,
   };
 
+  await saveSession(session);
   return NextResponse.json({
     dialing: true,
     dialMode: "multi",

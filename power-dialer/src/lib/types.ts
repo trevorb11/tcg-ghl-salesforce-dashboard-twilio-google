@@ -127,8 +127,7 @@ export interface DialerSession {
   totalConnected: number;   // Count of calls where lead actually talked to rep
 }
 
-// In-memory session store (for Phase 1 — replace with DB later)
-export const sessions = new Map<string, DialerSession>();
+// Session storage is now in Neon Postgres — see session-store.ts
 
 // Rep directory — Phase 1 uses a static list; Phase 2 pulls from GHL/Salesforce
 export const REP_DIRECTORY: Rep[] = [

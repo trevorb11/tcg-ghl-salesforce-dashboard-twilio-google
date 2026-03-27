@@ -3,7 +3,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { endConference } from "@/lib/carrier";
-import { sessions } from "@/lib/types";
+import { getSession, saveSession, deleteSession } from "@/lib/session-store";
 import { requireAuth } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
 
   const { sessionId } = await req.json();
 
-  const session = sessions.get(sessionId);
+  const session = await getSession(sessionId);
   if (!session) {
     return NextResponse.json({ error: "Session not found" }, { status: 404 });
   }
@@ -43,5 +43,6 @@ export async function POST(req: NextRequest) {
     ),
   };
 
+  await saveSession(session);
   return NextResponse.json(summary);
 }

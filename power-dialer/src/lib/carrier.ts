@@ -188,9 +188,8 @@ export async function generateWebRTCToken(repId: string): Promise<{
       Authorization: `Basic ${Buffer.from(`${config.accountSid}:${config.authToken}`).toString("base64")}`,
     },
     body: JSON.stringify({
-      expires_in: 28800, // 8 hours
+      expires_in: 480, // 8 hours in minutes (SignalWire max: 10080 = 7 days)
       resource,
-      scopes: ["calling", "messaging"],
     }),
   });
 
