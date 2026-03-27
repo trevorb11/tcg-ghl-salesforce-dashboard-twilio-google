@@ -55,10 +55,9 @@ export function useSignalWireWebRTC(): UseSignalWireWebRTCReturn {
 
     try {
       // Dynamically import to avoid SSR issues
-      const SW = await import("@signalwire/js");
+      const { Relay } = await import("@signalwire/js");
 
-      // @ts-expect-error - v1 API
-      const client = new SW.default({
+      const client = new Relay({
         project: config.project,
         token: config.token,
       });
