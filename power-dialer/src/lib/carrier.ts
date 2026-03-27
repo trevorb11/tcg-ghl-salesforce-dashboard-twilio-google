@@ -5,9 +5,9 @@
 // Provides a unified interface for both carriers. The active
 // carrier is determined by the VOICE_CARRIER env var.
 //
-// SignalWire's Compatibility API is a drop-in replacement for
-// the Twilio SDK — same method names, same TwiML. This file
-// simply routes calls through the right client.
+// - Twilio: uses the `twilio` SDK directly
+// - SignalWire: uses `@signalwire/compatibility-api` which has
+//   the same interface as Twilio but talks to SignalWire's API
 //
 // To switch carriers: set VOICE_CARRIER=signalwire in .env
 // and redeploy. Everything else stays the same.
@@ -55,9 +55,9 @@ export function getCarrierConfig(): CarrierConfig {
 }
 
 // ── Client factory ─────────────────────────────────────────
-// Both Twilio and SignalWire Compatibility API expose the same
-// interface, so we use the Twilio SDK for both — just with
-// different credentials and (for SignalWire) a custom API host.
+// Twilio uses the `twilio` SDK. SignalWire uses `@signalwire/compatibility-api`
+// which exposes the exact same interface (calls.create, conferences.list, etc.)
+// but authenticates with SignalWire Project ID + API Token.
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let _client: any = null;
@@ -70,17 +70,14 @@ export function getClient() {
   if (_client && _clientCarrier === config.carrier) return _client;
 
   if (config.carrier === "signalwire") {
-    // SignalWire Compatibility API works with the Twilio SDK
-    // by pointing it at the SignalWire REST API host
-    _client = twilio(config.accountSid, config.authToken, {
-      accountSid: config.accountSid,
-    });
-    // Override the base URL to point at SignalWire
+    // Use SignalWire's own Compatibility API client
+    // Same interface as Twilio SDK — calls.create(), conferences.list(), etc.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { RestClient } = require("@signalwire/compatibility-api");
     const swSpace = config.space || process.env.SIGNALWIRE_SPACE?.replace(".signalwire.com", "");
-    _client._api = new _client._api.constructor(
-      _client,
-      `https://${swSpace}.signalwire.com`
-    );
+    _client = RestClient(config.accountSid, config.authToken, {
+      signalwireSpaceUrl: `${swSpace}.signalwire.com`,
+    });
   } else {
     _client = twilio(config.accountSid, config.authToken);
   }
@@ -181,26 +178,28 @@ export async function generateWebRTCToken(repId: string): Promise<{
   const config = getCarrierConfig();
   const space = process.env.SIGNALWIRE_SPACE || `${config.space}.signalwire.com`;
   const spaceHost = space.includes(".signalwire.com") ? space : `${space}.signalwire.com`;
-  const resource = `dialer-${repId}-${Date.now()}`;
+  const resource = `rep-${repId}-${Date.now()}`;
 
-  const response = await fetch(`https://${spaceHost}/api/relay/rest/jwt`, {
+  // Request a JWT from SignalWire's REST API
+  const resp = await fetch(`https://${spaceHost}/api/relay/rest/jwt`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: "Basic " + Buffer.from(`${config.accountSid}:${config.authToken}`).toString("base64"),
+      Authorization: `Basic ${Buffer.from(`${config.accountSid}:${config.authToken}`).toString("base64")}`,
     },
     body: JSON.stringify({
+      expires_in: 28800, // 8 hours
       resource,
-      expires_in: 7200, // 2 hours
+      scopes: ["calling", "messaging"],
     }),
   });
 
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`SignalWire JWT error ${response.status}: ${text}`);
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`SignalWire JWT request failed (${resp.status}): ${text}`);
   }
 
-  const data = await response.json();
+  const data = await resp.json();
   return {
     token: data.jwt_token,
     resource,
@@ -208,7 +207,9 @@ export async function generateWebRTCToken(repId: string): Promise<{
   };
 }
 
-// Call the WebRTC browser client into the conference (instead of calling a phone)
+// ── WebRTC: Call a browser client into a conference ───────
+// After the browser has connected with a JWT, we can call the
+// browser's resource into the conference using the REST API.
 export async function callWebRTCClientIntoConference(
   resource: string,
   conferenceName: string,
@@ -216,14 +217,12 @@ export async function callWebRTCClientIntoConference(
 ): Promise<string> {
   const config = getCarrierConfig();
   const client = getClient();
-  const space = process.env.SIGNALWIRE_SPACE || `${config.space}.signalwire.com`;
-  const spaceHost = space.includes(".signalwire.com") ? space : `${space}.signalwire.com`;
-  const sessionParam = `&sessionId=${encodeURIComponent(sessionId)}`;
 
+  // Call the browser's SIP resource into the conference
   const call = await client.calls.create({
-    to: `sip:${resource}@${spaceHost}`,
+    to: `sip:${resource}@${config.space || process.env.SIGNALWIRE_SPACE?.replace(".signalwire.com", "")}.signalwire.com`,
     from: config.phoneNumber,
-    url: `${appUrl}/api/twilio/voice?action=join_conference&conference=${encodeURIComponent(conferenceName)}&role=rep${sessionParam}`,
+    url: `${appUrl}/api/twilio/voice?action=join_conference&conference=${encodeURIComponent(conferenceName)}&role=rep&sessionId=${encodeURIComponent(sessionId)}`,
     statusCallback: `${appUrl}/api/twilio/status`,
     statusCallbackEvent: ["initiated", "ringing", "answered", "completed"],
     statusCallbackMethod: "POST",
@@ -232,20 +231,19 @@ export async function callWebRTCClientIntoConference(
   return call.sid;
 }
 
-// Get recording URL for a conference
+// ── Conference recordings ────────────────────────────────
 export async function getConferenceRecordings(conferenceSid: string) {
-  const config = getCarrierConfig();
   const client = getClient();
+  const config = getCarrierConfig();
   const recordings = await client.conferences(conferenceSid).recordings.list();
 
-  // Recording URL format differs by carrier
   const baseUrl = config.carrier === "signalwire"
-    ? `https://${config.space}.signalwire.com/api/laml/2010-04-01/Accounts/${config.accountSid}`
-    : `https://api.twilio.com/2010-04-01/Accounts/${config.accountSid}`;
+    ? `https://${config.space || process.env.SIGNALWIRE_SPACE?.replace(".signalwire.com", "")}.signalwire.com/api/laml/2010-04-01/Accounts/${config.accountSid}/Recordings`
+    : `https://api.twilio.com/2010-04-01/Accounts/${config.accountSid}/Recordings`;
 
   return recordings.map((r: { sid: string; duration: string }) => ({
     sid: r.sid,
-    url: `${baseUrl}/Recordings/${r.sid}.mp3`,
+    url: `${baseUrl}/${r.sid}.mp3`,
     duration: r.duration,
   }));
 }

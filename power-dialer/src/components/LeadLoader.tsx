@@ -146,6 +146,10 @@ export default function LeadLoader({
   const [dialpadNumber, setDialpadNumber] = useState("");
   const [dialpadName, setDialpadName] = useState("");
   const [dialpadBusiness, setDialpadBusiness] = useState("");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [dialpadContact, setDialpadContact] = useState<any>(null);
+  const [dialpadLooking, setDialpadLooking] = useState(false);
+  const lookupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Custom criteria state
   const [filterTags, setFilterTags] = useState("");
@@ -215,6 +219,42 @@ export default function LeadLoader({
     }
   }
 
+  function handleDialpadNumberChange(value: string) {
+    setDialpadNumber(value);
+    setDialpadContact(null);
+
+    // Debounce lookup — trigger when 10+ digits entered
+    if (lookupTimerRef.current) clearTimeout(lookupTimerRef.current);
+    const digits = value.replace(/\D/g, "");
+    if (digits.length >= 10) {
+      lookupTimerRef.current = setTimeout(() => lookupContact(value), 400);
+    }
+  }
+
+  async function lookupContact(phone: string) {
+    let digits = phone.replace(/\D/g, "");
+    if (digits.length === 10) digits = "1" + digits;
+    if (!digits.startsWith("+")) digits = "+" + digits;
+
+    setDialpadLooking(true);
+    try {
+      const res = await apiFetch(`/api/contacts/lookup?phone=${encodeURIComponent(digits)}`);
+      const data = await res.json();
+      if (data.found) {
+        setDialpadContact(data.contact);
+        // Auto-fill name/business if rep hasn't typed anything
+        if (!dialpadName.trim()) setDialpadName(data.contact.name || "");
+        if (!dialpadBusiness.trim()) setDialpadBusiness(data.contact.businessName || "");
+      } else {
+        setDialpadContact(null);
+      }
+    } catch {
+      // Lookup failure is non-fatal
+    } finally {
+      setDialpadLooking(false);
+    }
+  }
+
   function handleDialpadDial() {
     let digits = dialpadNumber.replace(/\D/g, "");
     if (digits.length === 10) digits = "1" + digits;
@@ -224,16 +264,35 @@ export default function LeadLoader({
       return;
     }
 
+    const c = dialpadContact;
     const lead: Lead = {
-      id: `dialpad-${Date.now()}`,
-      name: dialpadName.trim() || "Manual Dial",
-      businessName: dialpadBusiness.trim(),
+      id: c?.id || `dialpad-${Date.now()}`,
+      name: dialpadName.trim() || c?.name || "Manual Dial",
+      businessName: dialpadBusiness.trim() || c?.businessName || "",
       phone: digits,
-      email: "",
-      pipelineId: "dialpad",
-      pipelineStageId: "dialpad",
-      stageName: "Manual Dial",
+      email: c?.email || "",
+      pipelineId: c?.pipeline || "dialpad",
+      pipelineStageId: c?.stage || "dialpad",
+      stageName: c?.stage || "Manual Dial",
     };
+
+    // Attach extended fields if contact was found in DB
+    if (c) {
+      Object.assign(lead, {
+        _monthlyRevenue: c.monthlyRevenue,
+        _industry: c.industry,
+        _yearsInBusiness: c.yearsInBusiness,
+        _amountRequested: c.amountRequested,
+        _creditScore: c.creditScore,
+        _lastNote: c.lastNote,
+        _lastDisposition: c.lastDisposition,
+        _approvalLetter: c.approvalLetter,
+        _previouslyFunded: c.previouslyFunded,
+        _currentPositions: c.currentPositions,
+        tags: c.tags ? c.tags.split(",").map((t: string) => t.trim()) : [],
+        lastContactedAt: c.lastContacted,
+      });
+    }
 
     onLeadsLoaded([lead]);
   }
@@ -536,7 +595,7 @@ export default function LeadLoader({
                 {["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"].map((key) => (
                   <button
                     key={key}
-                    onClick={() => setDialpadNumber((prev) => prev + key)}
+                    onClick={() => handleDialpadNumberChange(dialpadNumber + key)}
                     className="py-3.5 bg-gray-800 hover:bg-gray-700 text-white text-xl font-medium rounded-lg transition-colors"
                   >
                     {key}
@@ -546,36 +605,117 @@ export default function LeadLoader({
 
               {/* Backspace */}
               <button
-                onClick={() => setDialpadNumber((prev) => prev.slice(0, -1))}
+                onClick={() => handleDialpadNumberChange(dialpadNumber.slice(0, -1))}
                 className="text-gray-500 hover:text-gray-300 text-sm mb-4 transition-colors"
               >
                 Delete
               </button>
             </div>
 
-            {/* Optional name/business */}
+            {/* Contact match card */}
+            {dialpadLooking && (
+              <div className="flex items-center gap-2 px-4 py-3 bg-gray-900 border border-gray-800 rounded-lg">
+                <div className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                <span className="text-gray-500 text-sm">Looking up contact...</span>
+              </div>
+            )}
+
+            {dialpadContact && !dialpadLooking && (
+              <div className="bg-green-900/15 border border-green-800/40 rounded-lg p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-2 h-2 bg-green-400 rounded-full" />
+                  <span className="text-green-400 text-xs font-semibold uppercase tracking-wider">Contact Found</span>
+                </div>
+                <p className="text-white font-medium">{dialpadContact.name}</p>
+                {dialpadContact.businessName && (
+                  <p className="text-gray-400 text-sm">{dialpadContact.businessName}</p>
+                )}
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-2">
+                  {dialpadContact.industry && (
+                    <div>
+                      <span className="text-[10px] text-gray-600">Industry</span>
+                      <p className="text-xs text-gray-400">{dialpadContact.industry}</p>
+                    </div>
+                  )}
+                  {dialpadContact.monthlyRevenue && (
+                    <div>
+                      <span className="text-[10px] text-gray-600">Revenue</span>
+                      <p className="text-xs text-gray-400">{dialpadContact.monthlyRevenue}</p>
+                    </div>
+                  )}
+                  {dialpadContact.stage && (
+                    <div>
+                      <span className="text-[10px] text-gray-600">Stage</span>
+                      <p className="text-xs text-gray-400">{dialpadContact.stage}</p>
+                    </div>
+                  )}
+                  {dialpadContact.lastDisposition && (
+                    <div>
+                      <span className="text-[10px] text-gray-600">Last Disposition</span>
+                      <p className="text-xs text-gray-400">{dialpadContact.lastDisposition}</p>
+                    </div>
+                  )}
+                  {dialpadContact.assignedTo && (
+                    <div>
+                      <span className="text-[10px] text-gray-600">Assigned To</span>
+                      <p className="text-xs text-gray-400">{dialpadContact.assignedTo}</p>
+                    </div>
+                  )}
+                  {dialpadContact.lastContacted && (
+                    <div>
+                      <span className="text-[10px] text-gray-600">Last Contacted</span>
+                      <p className="text-xs text-gray-400">{dialpadContact.lastContacted}</p>
+                    </div>
+                  )}
+                </div>
+                {dialpadContact.lastNote && (
+                  <div className="mt-2 pt-2 border-t border-green-800/30">
+                    <span className="text-[10px] text-gray-600">Last Note</span>
+                    <p className="text-xs text-gray-400 line-clamp-2">{dialpadContact.lastNote}</p>
+                  </div>
+                )}
+                {dialpadContact.id && (
+                  <a
+                    href={`https://app.gohighlevel.com/v2/location/n778xwOps9t8Q34eRPfM/contacts/detail/${dialpadContact.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 mt-2 text-orange-400 text-xs hover:text-orange-300"
+                  >
+                    Open in GHL &rarr;
+                  </a>
+                )}
+              </div>
+            )}
+
+            {dialpadNumber.replace(/\D/g, "").length >= 10 && !dialpadContact && !dialpadLooking && (
+              <div className="px-4 py-2 bg-gray-900/50 border border-gray-800 rounded-lg">
+                <p className="text-gray-600 text-sm">No matching contact in database</p>
+              </div>
+            )}
+
+            {/* Name/business override */}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1.5">
-                  Name <span className="text-gray-700">(optional)</span>
+                  Name {dialpadContact ? "" : "(optional)"}
                 </label>
                 <input
                   type="text"
                   value={dialpadName}
                   onChange={(e) => setDialpadName(e.target.value)}
-                  placeholder="Contact name"
+                  placeholder={dialpadContact?.name || "Contact name"}
                   className="w-full px-3 py-2 bg-gray-900 border border-gray-800 rounded-lg text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                 />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1.5">
-                  Business <span className="text-gray-700">(optional)</span>
+                  Business {dialpadContact ? "" : "(optional)"}
                 </label>
                 <input
                   type="text"
                   value={dialpadBusiness}
                   onChange={(e) => setDialpadBusiness(e.target.value)}
-                  placeholder="Business name"
+                  placeholder={dialpadContact?.businessName || "Business name"}
                   className="w-full px-3 py-2 bg-gray-900 border border-gray-800 rounded-lg text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                 />
               </div>
@@ -589,7 +729,7 @@ export default function LeadLoader({
               <input
                 type="tel"
                 value={dialpadNumber}
-                onChange={(e) => setDialpadNumber(e.target.value)}
+                onChange={(e) => handleDialpadNumberChange(e.target.value)}
                 placeholder="(555) 123-4567"
                 className="w-full px-4 py-2.5 bg-gray-900 border border-gray-800 rounded-lg text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
               />
