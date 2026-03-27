@@ -1,20 +1,16 @@
-// POST /api/auth — Simple rep login
-// Phase 1: Rep provides email + their phone number to start a session.
-// We look them up in the rep directory. No passwords yet.
+// POST /api/auth — Rep login with email + phone + password
+// On success, returns rep info + the DIALER_API_KEY so the frontend
+// can authenticate subsequent API calls without the rep knowing the key.
 
 import { NextRequest, NextResponse } from "next/server";
 import { REP_DIRECTORY } from "@/lib/types";
-import { requireAuth } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
-  const authError = requireAuth(req);
-  if (authError) return authError;
+  const { email, phone, password } = await req.json();
 
-  const { email, phone } = await req.json();
-
-  if (!email || !phone) {
+  if (!email || !password) {
     return NextResponse.json(
-      { error: "Email and phone number are required" },
+      { error: "Email and password are required" },
       { status: 400 }
     );
   }
@@ -30,6 +26,13 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  if (password !== rep.password) {
+    return NextResponse.json(
+      { error: "Incorrect password." },
+      { status: 401 }
+    );
+  }
+
   // Normalize phone — ensure +1 prefix
   let normalizedPhone = phone.replace(/\D/g, "");
   if (normalizedPhone.length === 10) normalizedPhone = "1" + normalizedPhone;
@@ -40,5 +43,7 @@ export async function POST(req: NextRequest) {
     name: rep.name,
     email: rep.email,
     phone: normalizedPhone,
+    role: rep.role,
+    dialerKey: process.env.DIALER_API_KEY || "",
   });
 }

@@ -1,0 +1,1144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TCG Power Dialer — Caller Screen</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface-hover: #222636;
+    --border: #2a2e3d;
+    --text: #e4e6ef;
+    --text-muted: #8b8fa3;
+    --accent: #6366f1;
+    --accent-glow: rgba(99, 102, 241, 0.15);
+    --green: #22c55e;
+    --green-bg: rgba(34, 197, 94, 0.1);
+    --yellow: #eab308;
+    --yellow-bg: rgba(234, 179, 8, 0.1);
+    --red: #ef4444;
+    --red-bg: rgba(239, 68, 68, 0.1);
+    --blue: #3b82f6;
+    --blue-bg: rgba(59, 130, 246, 0.1);
+  }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Setup Screen */
+  .setup-screen {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 2rem;
+  }
+
+  .setup-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 2.5rem;
+    width: 100%;
+    max-width: 480px;
+  }
+
+  .setup-card h1 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+  }
+
+  .setup-card p {
+    color: var(--text-muted);
+    font-size: 0.875rem;
+    margin-bottom: 2rem;
+    line-height: 1.5;
+  }
+
+  .form-group {
+    margin-bottom: 1.25rem;
+  }
+
+  .form-group label {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    margin-bottom: 0.5rem;
+  }
+
+  .form-group input, .form-group select {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 0.9rem;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .form-group input:focus, .form-group select:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-glow);
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    transition: all 0.2s;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: white;
+    width: 100%;
+    margin-top: 0.5rem;
+  }
+
+  .btn-primary:hover { background: #5558e6; }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* Main Caller Screen */
+  .caller-screen {
+    display: none;
+    min-height: 100vh;
+    padding: 1.5rem;
+  }
+
+  .caller-screen.active {
+    display: block;
+  }
+
+  /* Top Bar */
+  .top-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .top-bar-left {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .logo {
+    font-size: 1rem;
+    font-weight: 800;
+    color: var(--accent);
+    letter-spacing: -0.02em;
+  }
+
+  .session-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+
+  .session-badge.live {
+    background: var(--green-bg);
+    color: var(--green);
+  }
+
+  .session-badge.live::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--green);
+    animation: pulse 2s infinite;
+  }
+
+  .session-badge.waiting {
+    background: var(--yellow-bg);
+    color: var(--yellow);
+  }
+
+  .session-badge.idle {
+    background: rgba(139, 143, 163, 0.1);
+    color: var(--text-muted);
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  .top-bar-right {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .progress-text {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+  }
+
+  .progress-text strong {
+    color: var(--text);
+  }
+
+  /* Main Grid */
+  .main-grid {
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    gap: 1.5rem;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  /* Contact Card */
+  .contact-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    overflow: hidden;
+  }
+
+  .contact-header {
+    padding: 2rem 2rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+    position: relative;
+  }
+
+  .contact-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 1rem;
+  }
+
+  .contact-status.ringing {
+    background: var(--yellow-bg);
+    color: var(--yellow);
+  }
+
+  .contact-status.connected {
+    background: var(--green-bg);
+    color: var(--green);
+  }
+
+  .contact-status.ended {
+    background: rgba(139, 143, 163, 0.1);
+    color: var(--text-muted);
+  }
+
+  .contact-name {
+    font-size: 2rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    margin-bottom: 0.25rem;
+    line-height: 1.2;
+  }
+
+  .contact-business {
+    font-size: 1.1rem;
+    color: var(--text-muted);
+    font-weight: 500;
+    margin-bottom: 1rem;
+  }
+
+  .contact-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.25rem;
+  }
+
+  .meta-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+  }
+
+  .meta-item .icon {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+  }
+
+  .meta-item a {
+    color: var(--blue);
+    text-decoration: none;
+  }
+
+  .meta-item a:hover {
+    text-decoration: underline;
+  }
+
+  /* Call Timer */
+  .call-timer {
+    position: absolute;
+    top: 2rem;
+    right: 2rem;
+    text-align: right;
+  }
+
+  .timer-value {
+    font-size: 1.75rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--green);
+  }
+
+  .timer-label {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  /* Contact Body */
+  .contact-body {
+    padding: 1.5rem 2rem 2rem;
+  }
+
+  .section-title {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    margin-bottom: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .section-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* Tags */
+  .tags-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .tag {
+    display: inline-block;
+    padding: 0.2rem 0.6rem;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    background: var(--surface-hover);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+  }
+
+  .tag.hot { background: var(--red-bg); color: var(--red); border-color: transparent; }
+  .tag.stage { background: var(--blue-bg); color: var(--blue); border-color: transparent; }
+  .tag.revenue { background: var(--green-bg); color: var(--green); border-color: transparent; }
+
+  /* Notes */
+  .notes-list {
+    list-style: none;
+    margin-bottom: 1.5rem;
+  }
+
+  .notes-list li {
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.85rem;
+    line-height: 1.5;
+  }
+
+  .notes-list li:last-child {
+    border-bottom: none;
+  }
+
+  .note-date {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-bottom: 0.25rem;
+  }
+
+  .note-body {
+    color: var(--text);
+  }
+
+  .no-data {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    font-style: italic;
+    padding: 0.5rem 0;
+  }
+
+  /* Stage Badge */
+  .stage-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.3rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+
+  .stage-badge.new-opp { background: var(--blue-bg); color: var(--blue); }
+  .stage-badge.waiting { background: var(--yellow-bg); color: var(--yellow); }
+  .stage-badge.second { background: var(--red-bg); color: var(--red); }
+  .stage-badge.approved { background: var(--green-bg); color: var(--green); }
+
+  /* Sidebar */
+  .sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .sidebar-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem;
+  }
+
+  .sidebar-card h3 {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    margin-bottom: 0.75rem;
+  }
+
+  /* Disposition Buttons */
+  .disposition-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+  }
+
+  .dispo-btn {
+    padding: 0.6rem 0.75rem;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    transition: all 0.15s;
+    text-align: center;
+  }
+
+  .dispo-btn:hover {
+    border-color: var(--accent);
+    background: var(--accent-glow);
+  }
+
+  .dispo-btn.active {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: white;
+  }
+
+  .dispo-btn.interested { border-left: 3px solid var(--green); }
+  .dispo-btn.callback { border-left: 3px solid var(--yellow); }
+  .dispo-btn.not-interested { border-left: 3px solid var(--red); }
+  .dispo-btn.no-answer { border-left: 3px solid var(--text-muted); }
+  .dispo-btn.voicemail { border-left: 3px solid #a78bfa; }
+  .dispo-btn.wrong-number { border-left: 3px solid #f97316; }
+  .dispo-btn.disconnected { border-left: 3px solid #64748b; }
+
+  /* Call Log */
+  .call-log-list {
+    list-style: none;
+    max-height: 300px;
+    overflow-y: auto;
+  }
+
+  .call-log-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.6rem 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.8rem;
+  }
+
+  .call-log-item:last-child { border-bottom: none; }
+
+  .call-log-name {
+    font-weight: 600;
+    margin-bottom: 0.125rem;
+  }
+
+  .call-log-biz {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+  }
+
+  .call-log-dispo {
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+  }
+
+  .call-log-dispo.interested { background: var(--green-bg); color: var(--green); }
+  .call-log-dispo.callback { background: var(--yellow-bg); color: var(--yellow); }
+  .call-log-dispo.not_interested { background: var(--red-bg); color: var(--red); }
+  .call-log-dispo.no_answer { background: rgba(139,143,163,0.1); color: var(--text-muted); }
+  .call-log-dispo.voicemail { background: rgba(167,139,250,0.1); color: #a78bfa; }
+
+  /* Session Stats */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+  }
+
+  .stat-item {
+    text-align: center;
+    padding: 0.75rem;
+    background: var(--bg);
+    border-radius: 8px;
+  }
+
+  .stat-value {
+    font-size: 1.25rem;
+    font-weight: 800;
+    color: var(--text);
+  }
+
+  .stat-label {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-top: 0.125rem;
+  }
+
+  /* Waiting State */
+  .waiting-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 400px;
+    text-align: center;
+    padding: 3rem;
+  }
+
+  .waiting-state .icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+  }
+
+  .waiting-state h2 {
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+  }
+
+  .waiting-state p {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+  }
+
+  /* Notes Input */
+  .notes-input {
+    width: 100%;
+    padding: 0.6rem 0.75rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 0.85rem;
+    resize: vertical;
+    min-height: 60px;
+    outline: none;
+    margin-top: 0.5rem;
+  }
+
+  .notes-input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-glow);
+  }
+
+  .btn-submit-dispo {
+    width: 100%;
+    margin-top: 0.75rem;
+    background: var(--accent);
+    color: white;
+    padding: 0.6rem;
+    border: none;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+
+  .btn-submit-dispo:hover { background: #5558e6; }
+  .btn-submit-dispo:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* Responsive */
+  @media (max-width: 900px) {
+    .main-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  .error-bar {
+    background: var(--red-bg);
+    color: var(--red);
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    margin-bottom: 1rem;
+    display: none;
+  }
+
+  .error-bar.visible { display: block; }
+</style>
+</head>
+<body>
+
+<!-- Setup Screen -->
+<div class="setup-screen" id="setupScreen">
+  <div class="setup-card">
+    <h1>TCG Caller Screen</h1>
+    <p>Connect to an active dialer session to see real-time contact info as calls come in. Open this on your second monitor.</p>
+
+    <div id="errorBar" class="error-bar"></div>
+
+    <div class="form-group">
+      <label>Dashboard URL</label>
+      <input type="text" id="dashboardUrl" placeholder="https://power-dialer-ten.vercel.app" />
+    </div>
+
+    <div class="form-group">
+      <label>API Key</label>
+      <input type="password" id="apiKey" placeholder="Your dialer API key" />
+    </div>
+
+    <div class="form-group">
+      <label>Session ID</label>
+      <input type="text" id="sessionId" placeholder="session-dillon-1711500000000" />
+    </div>
+
+    <button class="btn btn-primary" id="connectBtn" onclick="connect()">Connect to Session</button>
+
+    <p style="margin-top: 1.5rem; font-size: 0.75rem; color: var(--text-muted);">
+      Tip: Claude gives you the Session ID when you start a dialer session. Paste it here and this screen will auto-update with every call.
+    </p>
+  </div>
+</div>
+
+<!-- Main Caller Screen -->
+<div class="caller-screen" id="callerScreen">
+  <div class="top-bar">
+    <div class="top-bar-left">
+      <span class="logo">TCG DIALER</span>
+      <span class="session-badge idle" id="sessionBadge">Connecting...</span>
+    </div>
+    <div class="top-bar-right">
+      <span class="progress-text" id="progressText">— / —</span>
+    </div>
+  </div>
+
+  <div class="main-grid">
+    <!-- Left: Contact Card -->
+    <div class="contact-card" id="contactCard">
+      <div class="waiting-state" id="waitingState">
+        <div class="icon">📞</div>
+        <h2>Waiting for next call...</h2>
+        <p>Contact info will appear here when the next lead is dialed.</p>
+      </div>
+
+      <div id="contactContent" style="display:none;">
+        <div class="contact-header">
+          <div class="contact-status ringing" id="contactStatus">RINGING</div>
+          <div class="contact-name" id="contactName">—</div>
+          <div class="contact-business" id="contactBusiness">—</div>
+          <div class="contact-meta">
+            <div class="meta-item">
+              <span class="icon">📞</span>
+              <a href="#" id="contactPhone">—</a>
+            </div>
+            <div class="meta-item">
+              <span class="icon">📧</span>
+              <span id="contactEmail">—</span>
+            </div>
+            <div class="meta-item">
+              <span class="icon">📊</span>
+              <span class="stage-badge" id="contactStage">—</span>
+            </div>
+          </div>
+          <div class="call-timer" id="callTimer" style="display:none;">
+            <div class="timer-value" id="timerValue">0:00</div>
+            <div class="timer-label">Call Duration</div>
+          </div>
+        </div>
+
+        <div class="contact-body">
+          <div class="tags-row" id="tagsRow"></div>
+
+          <div class="section-title">Notes & History</div>
+          <ul class="notes-list" id="notesList">
+            <li class="no-data">No notes on file</li>
+          </ul>
+
+          <div class="section-title">Deal Info</div>
+          <div id="dealInfo" class="no-data">No deal info available</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Sidebar -->
+    <div class="sidebar">
+      <!-- Quick Disposition -->
+      <div class="sidebar-card">
+        <h3>Disposition</h3>
+        <div class="disposition-grid" id="dispoGrid">
+          <button class="dispo-btn interested" data-dispo="interested" onclick="selectDispo(this)">Interested</button>
+          <button class="dispo-btn callback" data-dispo="callback" onclick="selectDispo(this)">Callback</button>
+          <button class="dispo-btn not-interested" data-dispo="not_interested" onclick="selectDispo(this)">Not Interested</button>
+          <button class="dispo-btn no-answer" data-dispo="no_answer" onclick="selectDispo(this)">No Answer</button>
+          <button class="dispo-btn voicemail" data-dispo="voicemail" onclick="selectDispo(this)">Voicemail</button>
+          <button class="dispo-btn wrong-number" data-dispo="wrong_number" onclick="selectDispo(this)">Wrong #</button>
+          <button class="dispo-btn" data-dispo="disconnected" onclick="selectDispo(this)">Disconnected</button>
+        </div>
+        <textarea class="notes-input" id="dispoNotes" placeholder="Add notes (optional)..."></textarea>
+        <button class="btn-submit-dispo" id="submitDispoBtn" onclick="submitDispo()" disabled>Set Disposition</button>
+      </div>
+
+      <!-- Session Stats -->
+      <div class="sidebar-card">
+        <h3>Session Stats</h3>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <div class="stat-value" id="statCalls">0</div>
+            <div class="stat-label">Calls Made</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value" id="statConnected">0</div>
+            <div class="stat-label">Connected</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value" id="statInterested">0</div>
+            <div class="stat-label">Interested</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value" id="statRemaining">0</div>
+            <div class="stat-label">Remaining</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Call Log -->
+      <div class="sidebar-card">
+        <h3>Call Log</h3>
+        <ul class="call-log-list" id="callLogList">
+          <li class="no-data">No calls yet</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // State
+  let config = { dashboardUrl: '', apiKey: '', sessionId: '' };
+  let pollInterval = null;
+  let timerInterval = null;
+  let callStartTime = null;
+  let currentCallId = null;
+  let selectedDispo = null;
+  let lastKnownPosition = -1;
+
+  // Prefill from URL params
+  (function prefill() {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('url')) document.getElementById('dashboardUrl').value = params.get('url');
+    if (params.get('key')) document.getElementById('apiKey').value = params.get('key');
+    if (params.get('session')) document.getElementById('sessionId').value = params.get('session');
+
+    // Auto-connect if all params present
+    if (params.get('url') && params.get('key') && params.get('session')) {
+      setTimeout(connect, 500);
+    }
+  })();
+
+  async function connect() {
+    const dashboardUrl = document.getElementById('dashboardUrl').value.trim().replace(/\/$/, '');
+    const apiKey = document.getElementById('apiKey').value.trim();
+    const sessionId = document.getElementById('sessionId').value.trim();
+
+    if (!dashboardUrl || !apiKey || !sessionId) {
+      showError('All fields are required.');
+      return;
+    }
+
+    config = { dashboardUrl, apiKey, sessionId };
+    document.getElementById('connectBtn').disabled = true;
+    document.getElementById('connectBtn').textContent = 'Connecting...';
+
+    try {
+      const res = await apiCall(`/api/dialer/status?sessionId=${sessionId}`);
+      if (res.error) throw new Error(res.error);
+
+      document.getElementById('setupScreen').style.display = 'none';
+      document.getElementById('callerScreen').classList.add('active');
+      updateUI(res);
+      pollInterval = setInterval(poll, 3000);
+    } catch (e) {
+      showError(`Connection failed: ${e.message}`);
+      document.getElementById('connectBtn').disabled = false;
+      document.getElementById('connectBtn').textContent = 'Connect to Session';
+    }
+  }
+
+  function showError(msg) {
+    const bar = document.getElementById('errorBar');
+    bar.textContent = msg;
+    bar.classList.add('visible');
+    setTimeout(() => bar.classList.remove('visible'), 5000);
+  }
+
+  async function apiCall(endpoint, method = 'GET', body = null) {
+    const opts = {
+      method,
+      headers: {
+        'X-Dialer-Key': config.apiKey,
+        'Content-Type': 'application/json'
+      }
+    };
+    if (body) opts.body = JSON.stringify(body);
+    const res = await fetch(config.dashboardUrl + endpoint, opts);
+    return res.json();
+  }
+
+  async function poll() {
+    try {
+      const data = await apiCall(`/api/dialer/status?sessionId=${config.sessionId}`);
+      if (!data.error) updateUI(data);
+    } catch (e) {
+      console.error('Poll error:', e);
+    }
+  }
+
+  function updateUI(data) {
+    // Session badge
+    const badge = document.getElementById('sessionBadge');
+    const status = data.status || 'idle';
+    badge.className = 'session-badge';
+
+    if (status === 'on_call' || status === 'dialing') {
+      badge.classList.add('live');
+      badge.textContent = status === 'dialing' ? 'Ringing...' : 'On Call';
+    } else if (status === 'waiting' || status === 'connected' || status === 'connecting_rep') {
+      badge.classList.add('waiting');
+      badge.textContent = status === 'connecting_rep' ? 'Connecting Rep...' : 'Ready';
+    } else {
+      badge.classList.add('idle');
+      badge.textContent = status === 'ended' ? 'Session Ended' : 'Idle';
+    }
+
+    // Progress
+    const pos = data.position || 0;
+    const total = data.total || 0;
+    document.getElementById('progressText').innerHTML =
+      `Call <strong>${pos}</strong> of <strong>${total}</strong>`;
+
+    // Stats
+    const log = data.callLog || [];
+    const completed = log.filter(c => c.status === 'completed');
+    const connected = completed.filter(c =>
+      c.disposition && !['no_answer', 'voicemail', 'disconnected', 'wrong_number'].includes(c.disposition)
+    );
+    const interested = completed.filter(c => c.disposition === 'interested');
+
+    document.getElementById('statCalls').textContent = data.callsCompleted || completed.length;
+    document.getElementById('statConnected').textContent = connected.length;
+    document.getElementById('statInterested').textContent = interested.length;
+    document.getElementById('statRemaining').textContent = Math.max(0, total - pos);
+
+    // Call log
+    updateCallLog(log);
+
+    // Contact card
+    const lead = data.currentLead;
+    if (lead && lead.name) {
+      showContact(lead, data);
+    } else if (status === 'ended') {
+      showEnded(data);
+    }
+
+    // Detect new call
+    if (data.position !== lastKnownPosition && lead) {
+      lastKnownPosition = data.position;
+      currentCallId = data.lastCallId;
+      selectedDispo = null;
+      resetDispoUI();
+      callStartTime = new Date();
+      startTimer();
+      fetchContactNotes(lead);
+    }
+  }
+
+  function showContact(lead, data) {
+    document.getElementById('waitingState').style.display = 'none';
+    document.getElementById('contactContent').style.display = 'block';
+
+    document.getElementById('contactName').textContent = titleCase(lead.name || '—');
+    document.getElementById('contactBusiness').textContent = lead.businessName || '—';
+    document.getElementById('contactPhone').textContent = formatPhone(lead.phone || '—');
+    document.getElementById('contactPhone').href = `tel:${lead.phone}`;
+    document.getElementById('contactEmail').textContent = lead.email || '—';
+
+    // Stage
+    const stageEl = document.getElementById('contactStage');
+    stageEl.textContent = lead.stageName || '—';
+    stageEl.className = 'stage-badge';
+    if (lead.stageName?.includes('New')) stageEl.classList.add('new-opp');
+    else if (lead.stageName?.includes('Waiting')) stageEl.classList.add('waiting');
+    else if (lead.stageName?.includes('2nd')) stageEl.classList.add('second');
+    else if (lead.stageName?.includes('Approved')) stageEl.classList.add('approved');
+
+    // Contact status
+    const statusEl = document.getElementById('contactStatus');
+    const callStatus = data.lastCallStatus || 'ringing';
+    statusEl.className = 'contact-status';
+    if (callStatus === 'in-progress') {
+      statusEl.classList.add('connected');
+      statusEl.textContent = 'CONNECTED';
+    } else if (callStatus === 'ringing') {
+      statusEl.classList.add('ringing');
+      statusEl.textContent = 'RINGING';
+    } else {
+      statusEl.classList.add('ended');
+      statusEl.textContent = 'CALL ENDED';
+    }
+
+    // Timer
+    document.getElementById('callTimer').style.display = 'block';
+  }
+
+  function showEnded(data) {
+    document.getElementById('waitingState').style.display = 'flex';
+    document.getElementById('contactContent').style.display = 'none';
+    document.getElementById('waitingState').innerHTML = `
+      <div class="icon">✅</div>
+      <h2>Session Complete</h2>
+      <p>${data.callsCompleted || 0} calls made. Check the call log for your summary.</p>
+    `;
+    stopTimer();
+  }
+
+  async function fetchContactNotes(lead) {
+    // Try to get contact notes from GHL via the dashboard
+    // If the dashboard doesn't have a notes endpoint, we show what we have
+    const tagsRow = document.getElementById('tagsRow');
+    const notesList = document.getElementById('notesList');
+    const dealInfo = document.getElementById('dealInfo');
+
+    tagsRow.innerHTML = '';
+    notesList.innerHTML = '<li class="no-data">Loading notes...</li>';
+    dealInfo.innerHTML = 'Loading...';
+
+    // Show tags if available from lead data
+    if (lead.tags && lead.tags.length) {
+      lead.tags.forEach(tag => {
+        const el = document.createElement('span');
+        el.className = 'tag';
+        if (tag.includes('hot')) el.className += ' hot';
+        else if (tag.includes('rev')) el.className += ' revenue';
+        else if (tag.includes('stage') || tag.includes('opportunity')) el.className += ' stage';
+        el.textContent = tag;
+        tagsRow.appendChild(el);
+      });
+    }
+
+    // Show stage/source as deal info
+    dealInfo.innerHTML = `
+      <div style="font-size:0.85rem; line-height:1.8;">
+        <strong>Stage:</strong> ${lead.stageName || '—'}<br>
+        <strong>Source:</strong> ${lead.source || '—'}<br>
+        <strong>Pipeline:</strong> App Sent — Warm
+      </div>
+    `;
+
+    // Attempt to load notes from the dashboard API
+    try {
+      const res = await apiCall(`/api/contacts/${lead.id || lead.contactId}/notes`);
+      if (res.notes && res.notes.length) {
+        notesList.innerHTML = '';
+        res.notes.slice(0, 8).forEach(note => {
+          const li = document.createElement('li');
+          li.innerHTML = `
+            <div class="note-date">${formatDate(note.dateAdded || note.createdAt)}</div>
+            <div class="note-body">${escapeHtml(note.body || '')}</div>
+          `;
+          notesList.appendChild(li);
+        });
+      } else {
+        notesList.innerHTML = '<li class="no-data">No notes on file — first contact</li>';
+      }
+    } catch (e) {
+      notesList.innerHTML = '<li class="no-data">Notes unavailable (connect GHL for full history)</li>';
+    }
+  }
+
+  function updateCallLog(log) {
+    const list = document.getElementById('callLogList');
+    if (!log.length) return;
+
+    list.innerHTML = '';
+    [...log].reverse().forEach(call => {
+      const li = document.createElement('li');
+      li.className = 'call-log-item';
+      li.innerHTML = `
+        <div>
+          <div class="call-log-name">${titleCase(call.leadName || '—')}</div>
+          <div class="call-log-biz">${call.leadBusinessName || '—'}</div>
+        </div>
+        <span class="call-log-dispo ${call.disposition || ''}">${formatDispo(call.disposition)}</span>
+      `;
+      list.appendChild(li);
+    });
+  }
+
+  // Disposition
+  function selectDispo(btn) {
+    document.querySelectorAll('.dispo-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    selectedDispo = btn.dataset.dispo;
+    document.getElementById('submitDispoBtn').disabled = false;
+  }
+
+  function resetDispoUI() {
+    document.querySelectorAll('.dispo-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('dispoNotes').value = '';
+    document.getElementById('submitDispoBtn').disabled = true;
+  }
+
+  async function submitDispo() {
+    if (!selectedDispo || !config.sessionId) return;
+
+    const btn = document.getElementById('submitDispoBtn');
+    btn.disabled = true;
+    btn.textContent = 'Saving...';
+
+    try {
+      await apiCall('/api/dialer/disposition', 'POST', {
+        sessionId: config.sessionId,
+        disposition: selectedDispo,
+        notes: document.getElementById('dispoNotes').value.trim()
+      });
+      btn.textContent = 'Saved ✓';
+      setTimeout(() => {
+        btn.textContent = 'Set Disposition';
+        resetDispoUI();
+      }, 2000);
+    } catch (e) {
+      btn.textContent = 'Error — Try Again';
+      btn.disabled = false;
+    }
+  }
+
+  // Timer
+  function startTimer() {
+    stopTimer();
+    callStartTime = new Date();
+    document.getElementById('timerValue').textContent = '0:00';
+    timerInterval = setInterval(() => {
+      const elapsed = Math.floor((new Date() - callStartTime) / 1000);
+      const mins = Math.floor(elapsed / 60);
+      const secs = (elapsed % 60).toString().padStart(2, '0');
+      document.getElementById('timerValue').textContent = `${mins}:${secs}`;
+    }, 1000);
+  }
+
+  function stopTimer() {
+    if (timerInterval) clearInterval(timerInterval);
+  }
+
+  // Utilities
+  function titleCase(str) {
+    return str.replace(/\b\w/g, c => c.toUpperCase());
+  }
+
+  function formatPhone(phone) {
+    if (!phone || phone === '—') return '—';
+    const d = phone.replace(/\D/g, '').slice(-10);
+    if (d.length === 10) return `(${d.slice(0,3)}) ${d.slice(3,6)}-${d.slice(6)}`;
+    return phone;
+  }
+
+  function formatDate(dateStr) {
+    if (!dateStr) return '';
+    try {
+      const d = new Date(dateStr);
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    } catch { return dateStr; }
+  }
+
+  function formatDispo(d) {
+    if (!d) return '—';
+    return d.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+</script>
+</body>
+</html>

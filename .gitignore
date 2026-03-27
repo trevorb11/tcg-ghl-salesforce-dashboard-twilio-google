@@ -1,8 +1,22 @@
 # Credentials and secrets
 API_Credentials.env.txt
 *.env
-*.env.*
+*.env.local
+*.env.prod
+*.env.production
+.env.prod
+.env.production
 
 # OS files
 .DS_Store
 Thumbs.db
+
+# Node
+node_modules/
+
+# Large data exports
+Export_Contacts_*.csv
+
+# Import scripts with credentials
+power-dialer/import-contacts.js
+dialer-kit/credentials.env.txt

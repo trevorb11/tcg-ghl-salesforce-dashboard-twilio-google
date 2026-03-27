@@ -11,10 +11,24 @@ cat .env
 ```
 
 The `.env` file contains:
+- `VOICE_CARRIER` — **"twilio" or "signalwire"** — controls which carrier handles calls
 - `DASHBOARD_URL` — The deployed Power Dialer dashboard (all dialer operations go through here)
 - `DIALER_API_KEY` — API key for dashboard auth
 - `GHL_API_KEY` — GoHighLevel CRM API key (for direct CRM lookups)
 - `GHL_LOCATION_ID` — GHL location ID
+- Twilio credentials (`TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER`)
+- SignalWire credentials (`SIGNALWIRE_SPACE`, `SIGNALWIRE_PROJECT_ID`, `SIGNALWIRE_API_TOKEN`, `SIGNALWIRE_PHONE_NUMBER`)
+
+## Carrier Toggle
+
+The dialer supports **two voice carriers**: Twilio and SignalWire. The active carrier is set by `VOICE_CARRIER` in `.env`.
+
+- **Twilio** (`VOICE_CARRIER=twilio`) — The original carrier. $0.014/min, 1-minute billing minimum.
+- **SignalWire** (`VOICE_CARRIER=signalwire`) — Cheaper alternative. $0.008/min, per-second billing. Better for high-volume dialing (200+ calls/day).
+
+When the dashboard receives a dialer request, it checks `VOICE_CARRIER` and routes through the corresponding carrier's API. Both carriers use the same TwiML/call-flow concepts — the dashboard handles the abstraction.
+
+**To switch carriers:** Change `VOICE_CARRIER` in `.env` and redeploy. No other changes needed. The dashboard API endpoints stay the same for Claude — the carrier switch is invisible to the rep.
 
 ## How to Make API Calls
 

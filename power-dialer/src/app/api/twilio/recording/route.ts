@@ -3,6 +3,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { sessions } from "@/lib/types";
+import { getActiveCarrier } from "@/lib/carrier";
 
 export async function POST(req: NextRequest) {
   const formData = await req.formData();
@@ -69,27 +70,39 @@ async function storeRecordingRef(
     }
   }
 
-  // Request Twilio transcription via REST API (best-effort)
-  const accountSid = process.env.TWILIO_ACCOUNT_SID || "";
-  const authToken = process.env.TWILIO_AUTH_TOKEN || "";
+  // Request transcription via REST API (best-effort)
+  // SignalWire doesn't support Twilio's transcription API, so we only
+  // request transcription when on Twilio or when Twilio creds are available as fallback.
+  const carrier = getActiveCarrier();
+  const accountSid = carrier === "signalwire"
+    ? (process.env.TWILIO_ACCOUNT_SID || "") // Use Twilio creds as fallback
+    : (process.env.TWILIO_ACCOUNT_SID || "");
+  const authToken = carrier === "signalwire"
+    ? (process.env.TWILIO_AUTH_TOKEN || "")
+    : (process.env.TWILIO_AUTH_TOKEN || "");
 
-  try {
-    const res = await fetch(
-      `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Recordings/${recordingSid}/Transcriptions.json`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: "Basic " + Buffer.from(`${accountSid}:${authToken}`).toString("base64"),
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
+  // Only attempt Twilio transcription if we have Twilio credentials
+  if (accountSid && authToken && carrier === "twilio") {
+    try {
+      const res = await fetch(
+        `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Recordings/${recordingSid}/Transcriptions.json`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: "Basic " + Buffer.from(`${accountSid}:${authToken}`).toString("base64"),
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+        }
+      );
+      if (res.ok) {
+        console.log(`Transcription requested for recording ${recordingSid}`);
+      } else {
+        console.log(`Transcription request returned ${res.status} — will rely on call-analysis endpoint`);
       }
-    );
-    if (res.ok) {
-      console.log(`Transcription requested for recording ${recordingSid}`);
-    } else {
-      console.log(`Transcription request returned ${res.status} — will rely on call-analysis endpoint`);
+    } catch (err) {
+      console.error("Failed to request Twilio transcription:", err);
     }
-  } catch (err) {
-    console.error("Failed to request Twilio transcription:", err);
+  } else if (carrier === "signalwire") {
+    console.log(`Recording ${recordingSid} on SignalWire — transcription will be handled by call-analysis endpoint`);
   }
 }

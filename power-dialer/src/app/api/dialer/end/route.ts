@@ -2,7 +2,7 @@
 // Hangs up all calls, ends the conference, returns summary
 
 import { NextRequest, NextResponse } from "next/server";
-import { endConference } from "@/lib/twilio";
+import { endConference } from "@/lib/carrier";
 import { sessions } from "@/lib/types";
 import { requireAuth } from "@/lib/auth";
 

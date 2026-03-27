@@ -1,8 +1,9 @@
-// GET /api/leads?stage=missing_in_action
-// Fetches leads from GHL for a specific pipeline stage
+// GET /api/leads?stage=missing_in_action&source=db|ghl
+// Fetches leads from local database (default) or GHL as fallback
 
 import { NextRequest, NextResponse } from "next/server";
 import { getLeadsByStage, STAGE_MAP } from "@/lib/ghl";
+import { getLeadsFromDb, DB_STAGE_MAP } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
 
 export async function GET(req: NextRequest) {
@@ -10,22 +11,58 @@ export async function GET(req: NextRequest) {
   if (authError) return authError;
 
   const stage = req.nextUrl.searchParams.get("stage");
+  const source = req.nextUrl.searchParams.get("source") || "db";
 
-  if (!stage || !STAGE_MAP[stage]) {
+  if (!stage) {
+    return NextResponse.json({ error: "stage parameter is required" }, { status: 400 });
+  }
+
+  // Force GHL if requested or if stage isn't in DB map
+  const useGhl = source === "ghl" || (!DB_STAGE_MAP[stage] && STAGE_MAP[stage]);
+
+  if (useGhl) {
+    if (!STAGE_MAP[stage]) {
+      return NextResponse.json(
+        { error: "Invalid stage. Valid stages: " + Object.keys(STAGE_MAP).join(", ") },
+        { status: 400 }
+      );
+    }
+    try {
+      const leads = await getLeadsByStage(stage);
+      return NextResponse.json({ leads, count: leads.length, stage, source: "ghl" });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      console.error("GHL fetch failed:", message);
+      return NextResponse.json({ error: message }, { status: 500 });
+    }
+  }
+
+  // Default: query local database
+  if (!DB_STAGE_MAP[stage]) {
     return NextResponse.json(
-      {
-        error: "Invalid stage. Valid stages: " + Object.keys(STAGE_MAP).join(", "),
-      },
+      { error: "Invalid stage. Valid stages: " + Object.keys(DB_STAGE_MAP).join(", ") },
       { status: 400 }
     );
   }
 
   try {
-    const leads = await getLeadsByStage(stage);
-    return NextResponse.json({ leads, count: leads.length, stage });
+    const leads = await getLeadsFromDb(stage);
+    return NextResponse.json({ leads, count: leads.length, stage, source: "db" });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
-    console.error("Failed to fetch leads:", message);
+    console.error("DB fetch failed, trying GHL fallback:", message);
+
+    // Fallback to GHL if DB fails
+    if (STAGE_MAP[stage]) {
+      try {
+        const leads = await getLeadsByStage(stage);
+        return NextResponse.json({ leads, count: leads.length, stage, source: "ghl-fallback" });
+      } catch (ghlErr: unknown) {
+        const ghlMsg = ghlErr instanceof Error ? ghlErr.message : "Unknown error";
+        return NextResponse.json({ error: `DB: ${message}. GHL fallback: ${ghlMsg}` }, { status: 500 });
+      }
+    }
+
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

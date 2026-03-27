@@ -6,7 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { sessions } from "@/lib/types";
 import { analyzeCallTranscript } from "@/lib/claude";
 import { addContactNote } from "@/lib/ghl";
-import { twilioClient } from "@/lib/twilio";
+import { getClient, getTwilioClient, getActiveCarrier } from "@/lib/carrier";
 import { requireAuth } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
@@ -34,9 +34,15 @@ export async function POST(req: NextRequest) {
   let transcript = call.transcription || "";
 
   if (!transcript && call.recordingSid) {
-    // Try fetching from Twilio
+    // Try fetching transcription — use the carrier that made the call,
+    // falling back to Twilio client for transcription if available
+    const carrier = call.carrier || getActiveCarrier();
+    const transcriptionClient = carrier === "signalwire"
+      ? (getTwilioClient() || getClient()) // Prefer Twilio for transcription, fall back to SW
+      : getClient();
+
     try {
-      const transcriptions = await twilioClient
+      const transcriptions = await transcriptionClient
         .recordings(call.recordingSid)
         .transcriptions.list({ limit: 1 });
 

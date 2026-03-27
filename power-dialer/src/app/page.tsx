@@ -11,6 +11,7 @@ interface Rep {
   name: string;
   email: string;
   phone: string;
+  role: "rep" | "admin";
 }
 
 interface Lead {
@@ -23,6 +24,20 @@ interface Lead {
   pipelineStageId: string;
   stageName: string;
   opportunityId?: string;
+  tags?: string[];
+  lastContactedAt?: string;
+  _monthlyRevenue?: string;
+  _industry?: string;
+  _yearsInBusiness?: string;
+  _amountRequested?: string;
+  _creditScore?: string;
+  _lastNote?: string;
+  _lastDisposition?: string;
+  _approvalLetter?: string;
+  _previouslyFunded?: string;
+  _currentPositions?: string;
+  _salesforceId?: string;
+  _salesforceType?: string;
 }
 
 type Screen = "login" | "load_leads" | "dialer";

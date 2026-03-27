@@ -8,6 +8,7 @@ interface Rep {
   name: string;
   email: string;
   phone: string;
+  role: "rep" | "admin";
 }
 
 interface Lead {
@@ -17,6 +18,21 @@ interface Lead {
   phone: string;
   email: string;
   stageName: string;
+  // Extended DB fields
+  _monthlyRevenue?: string;
+  _industry?: string;
+  _yearsInBusiness?: string;
+  _amountRequested?: string;
+  _creditScore?: string;
+  _lastNote?: string;
+  _lastDisposition?: string;
+  _approvalLetter?: string;
+  _previouslyFunded?: string;
+  _currentPositions?: string;
+  _salesforceId?: string;
+  _salesforceType?: string;
+  lastContactedAt?: string;
+  tags?: string[];
 }
 
 type Status =
@@ -110,6 +126,12 @@ export default function DialerDashboard({
   const [loadingSummary, setLoadingSummary] = useState(false);
   const [expandedCallId, setExpandedCallId] = useState<string | null>(null);
 
+  // Multi-line state
+  const [dialMode, setDialMode] = useState<"single" | "multi">("single");
+  const [linesCount, setLinesCount] = useState(1);
+  const [batchInfo, setBatchInfo] = useState<{ linesDialed: number; connected: boolean; settled: boolean } | null>(null);
+  const [dialingLeads, setDialingLeads] = useState<{ name: string; businessName: string; phone: string; callSid?: string }[]>([]);
+
   // Poll session status
   const pollStatus = useCallback(async () => {
     if (!sessionId) return;
@@ -122,6 +144,10 @@ export default function DialerDashboard({
       if (data.currentLead) {
         setCurrentLead(data.currentLead);
       }
+      // Multi-line state
+      if (data.dialMode) setDialMode(data.dialMode);
+      if (data.lines) setLinesCount(data.lines);
+      if (data.batch) setBatchInfo(data.batch);
       // If AI analysis came back via the backend, pick it up
       if (data.lastCallAnalysis && !lastAnalysis) {
         setLastAnalysis(data.lastCallAnalysis);
@@ -231,7 +257,16 @@ export default function DialerDashboard({
         return;
       }
 
-      setCurrentLead(data.lead);
+      // Multi-line: capture all leads being dialed
+      if (data.dialMode === "multi" && data.leads) {
+        setDialingLeads(data.leads);
+        setDialMode("multi");
+        setLinesCount(data.lines || data.leads.length);
+      } else {
+        setDialingLeads([]);
+      }
+
+      if (data.lead) setCurrentLead(data.lead);
       setPosition(data.position);
       setStatus("dialing");
     } catch (err: unknown) {
@@ -304,10 +339,13 @@ export default function DialerDashboard({
   }
 
   function StatusBadge({ s }: { s: Status }) {
+    const dialingLabel = dialMode === "multi" && linesCount > 1
+      ? `Ringing ${linesCount} Lines...`
+      : "Ringing Lead...";
     const config: Record<Status, { label: string; color: string; pulse: boolean }> = {
       idle: { label: "Ready", color: "bg-gray-500", pulse: false },
       connecting_rep: { label: "Connecting You...", color: "bg-yellow-500", pulse: true },
-      dialing: { label: "Ringing Lead...", color: "bg-blue-500", pulse: true },
+      dialing: { label: dialingLabel, color: "bg-blue-500", pulse: true },
       on_call: { label: "Live Call", color: "bg-green-500", pulse: true },
       wrap_up: { label: "Wrap Up", color: "bg-orange-500", pulse: false },
       ended: { label: "Session Ended", color: "bg-gray-500", pulse: false },
@@ -400,13 +438,42 @@ export default function DialerDashboard({
               {/* Current Lead Info */}
               {currentLead && (status === "dialing" || status === "on_call" || status === "wrap_up") ? (
                 <div className="mb-6">
+                  {/* Lead header + CRM links */}
                   <div className="flex items-center justify-between mb-4">
                     <div>
                       <h2 className="text-2xl font-bold">{currentLead.name}</h2>
                       {currentLead.businessName && (
                         <p className="text-gray-400 text-lg">{currentLead.businessName}</p>
                       )}
-                      <p className="text-gray-500">{currentLead.phone}</p>
+                      <div className="flex items-center gap-3 mt-1">
+                        <span className="text-gray-500">{currentLead.phone}</span>
+                        {currentLead.email && (
+                          <span className="text-gray-600 text-sm">{currentLead.email}</span>
+                        )}
+                      </div>
+                      {/* CRM Links */}
+                      <div className="flex items-center gap-2 mt-2">
+                        {currentLead.id && !currentLead.id.startsWith("db-") && !currentLead.id.startsWith("upload-") && (
+                          <a
+                            href={`https://app.gohighlevel.com/v2/location/n778xwOps9t8Q34eRPfM/contacts/detail/${currentLead.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-orange-600/20 text-orange-400 text-xs font-medium rounded-md hover:bg-orange-600/30 transition-colors"
+                          >
+                            GHL Record &rarr;
+                          </a>
+                        )}
+                        {currentLead._salesforceId && (
+                          <a
+                            href={`https://customization-data-47--dev.sandbox.lightning.force.com/lightning/r/${currentLead._salesforceType || "Contact"}/${currentLead._salesforceId}/view`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-600/20 text-blue-400 text-xs font-medium rounded-md hover:bg-blue-600/30 transition-colors"
+                          >
+                            Salesforce &rarr;
+                          </a>
+                        )}
+                      </div>
                     </div>
                     <div className="text-right">
                       <p className="text-sm text-gray-500">
@@ -419,6 +486,9 @@ export default function DialerDashboard({
                       )}
                     </div>
                   </div>
+
+                  {/* Contact context card */}
+                  <LeadContextCard lead={currentLead} />
                 </div>
               ) : (
                 <div className="text-center mb-6">
@@ -442,11 +512,43 @@ export default function DialerDashboard({
 
               {/* Dialing indicator */}
               {status === "dialing" && (
-                <div className="text-center py-4">
-                  <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-                  <p className="text-blue-400 font-medium">
-                    Ringing {currentLead?.name}...
-                  </p>
+                <div className="py-4">
+                  {dialMode === "multi" && dialingLeads.length > 1 ? (
+                    /* Multi-line: show all lines ringing */
+                    <div>
+                      <div className="flex items-center justify-center gap-2 mb-4">
+                        <div className="w-6 h-6 border-3 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                        <p className="text-blue-400 font-semibold">
+                          Ringing {dialingLeads.length} lines — first to answer connects
+                        </p>
+                      </div>
+                      <div className="grid gap-2">
+                        {dialingLeads.map((dl, i) => (
+                          <div
+                            key={i}
+                            className="flex items-center gap-3 px-4 py-2.5 bg-blue-900/15 border border-blue-800/30 rounded-lg"
+                          >
+                            <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse shrink-0" />
+                            <div className="min-w-0 flex-1">
+                              <span className="text-sm font-medium text-gray-200">{dl.name}</span>
+                              {dl.businessName && (
+                                <span className="text-gray-500 text-sm ml-2">— {dl.businessName}</span>
+                              )}
+                            </div>
+                            <span className="text-gray-600 text-xs font-mono shrink-0">{dl.phone}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    /* Single line */
+                    <div className="text-center">
+                      <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                      <p className="text-blue-400 font-medium">
+                        Ringing {currentLead?.name}...
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -455,7 +557,7 @@ export default function DialerDashboard({
                 <div className="text-center py-4">
                   <div className="w-4 h-4 bg-green-500 rounded-full animate-pulse mx-auto mb-2" />
                   <p className="text-green-400 font-medium text-lg">
-                    Connected — You&apos;re live!
+                    Connected{dialMode === "multi" && currentLead ? ` with ${currentLead.name}` : ""} — You&apos;re live!
                   </p>
                 </div>
               )}
@@ -739,6 +841,82 @@ export default function DialerDashboard({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function LeadContextCard({ lead }: { lead: Lead }) {
+  const details: { label: string; value: string }[] = [];
+
+  if (lead._monthlyRevenue) details.push({ label: "Monthly Revenue", value: lead._monthlyRevenue });
+  if (lead._amountRequested) details.push({ label: "Amount Requested", value: lead._amountRequested });
+  if (lead._industry) details.push({ label: "Industry", value: lead._industry });
+  if (lead._yearsInBusiness) details.push({ label: "Years in Business", value: lead._yearsInBusiness });
+  if (lead._creditScore) details.push({ label: "Credit Score", value: lead._creditScore });
+  if (lead._previouslyFunded) details.push({ label: "Previously Funded", value: lead._previouslyFunded });
+  if (lead._currentPositions) details.push({ label: "Current Positions", value: lead._currentPositions });
+  if (lead._lastDisposition) details.push({ label: "Last Disposition", value: lead._lastDisposition });
+  if (lead.lastContactedAt) details.push({ label: "Last Contacted", value: lead.lastContactedAt });
+
+  const hasApproval = lead._approvalLetter && lead._approvalLetter.trim() !== "";
+  const hasNote = lead._lastNote && lead._lastNote.trim() !== "";
+
+  if (details.length === 0 && !hasApproval && !hasNote && (!lead.tags || lead.tags.length === 0)) {
+    return null;
+  }
+
+  return (
+    <div className="bg-gray-800/40 border border-gray-700/50 rounded-lg p-4 space-y-3">
+      {/* Quick stats grid */}
+      {details.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2">
+          {details.map((d) => (
+            <div key={d.label}>
+              <p className="text-[10px] text-gray-500 uppercase tracking-wider">{d.label}</p>
+              <p className="text-sm text-gray-300 truncate">{d.value}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Approval letter alert */}
+      {hasApproval && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-green-900/20 border border-green-800/40 rounded-md">
+          <span className="text-green-400 text-xs font-semibold uppercase">Approval on file</span>
+          <a
+            href={lead._approvalLetter}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-green-400 text-xs underline hover:text-green-300 ml-auto"
+          >
+            View &rarr;
+          </a>
+        </div>
+      )}
+
+      {/* Tags */}
+      {lead.tags && lead.tags.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {lead.tags.map((tag, i) => (
+            <span
+              key={i}
+              className="px-2 py-0.5 bg-gray-700/50 text-gray-400 text-[10px] rounded-full"
+            >
+              {tag}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Last note */}
+      {hasNote && (
+        <div>
+          <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-0.5">Last Note</p>
+          <p className="text-xs text-gray-400 leading-relaxed line-clamp-3">
+            {lead._lastNote}
+          </p>
+        </div>
+      )}
     </div>
   );
 }
