@@ -4,6 +4,7 @@ import { useState } from "react";
 import LoginScreen from "@/components/LoginScreen";
 import LeadLoader from "@/components/LeadLoader";
 import DialerDashboard from "@/components/DialerDashboard";
+import { setApiKey } from "@/lib/api-client";
 
 interface Rep {
   id: string;
@@ -31,7 +32,8 @@ export default function Home() {
   const [rep, setRep] = useState<Rep | null>(null);
   const [leads, setLeads] = useState<Lead[]>([]);
 
-  function handleLogin(repData: Rep) {
+  function handleLogin(repData: Rep, apiKey: string) {
+    setApiKey(apiKey);
     setRep(repData);
     setScreen("load_leads");
   }

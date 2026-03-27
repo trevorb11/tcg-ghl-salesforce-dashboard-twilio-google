@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { apiFetch } from "@/lib/api-client";
 
 interface Rep {
   id: string;
@@ -113,7 +114,7 @@ export default function DialerDashboard({
   const pollStatus = useCallback(async () => {
     if (!sessionId) return;
     try {
-      const res = await fetch(`/api/dialer/status?sessionId=${sessionId}`);
+      const res = await apiFetch(`/api/dialer/status?sessionId=${sessionId}`);
       if (!res.ok) return;
       const data = await res.json();
       setStatus(data.status);
@@ -168,7 +169,7 @@ export default function DialerDashboard({
     if (!sessionId) return;
     setAnalyzingCall(true);
     try {
-      const res = await fetch("/api/dialer/call-analysis", {
+      const res = await apiFetch("/api/dialer/call-analysis", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sessionId, callId }),
@@ -188,7 +189,7 @@ export default function DialerDashboard({
   async function startSession() {
     setError("");
     try {
-      const res = await fetch("/api/dialer/start", {
+      const res = await apiFetch("/api/dialer/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -217,7 +218,7 @@ export default function DialerDashboard({
     setLastAnalysis(null);
 
     try {
-      const res = await fetch("/api/dialer/next", {
+      const res = await apiFetch("/api/dialer/next", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sessionId }),
@@ -244,7 +245,7 @@ export default function DialerDashboard({
     if (!sessionId) return;
 
     try {
-      const res = await fetch("/api/dialer/disposition", {
+      const res = await apiFetch("/api/dialer/disposition", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sessionId, disposition, notes }),
@@ -265,7 +266,7 @@ export default function DialerDashboard({
     if (!sessionId) return;
     setLoadingSummary(true);
     try {
-      const res = await fetch("/api/dialer/summary", {
+      const res = await apiFetch("/api/dialer/summary", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sessionId }),
@@ -285,7 +286,7 @@ export default function DialerDashboard({
   async function endSession() {
     if (!sessionId) return;
     try {
-      await fetch("/api/dialer/end", {
+      await apiFetch("/api/dialer/end", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sessionId }),

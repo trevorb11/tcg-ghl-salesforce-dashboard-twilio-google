@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { apiFetch } from "@/lib/api-client";
 
 interface Rep {
   id: string;
@@ -74,7 +75,7 @@ export default function LeadLoader({
     setError("");
 
     try {
-      const res = await fetch(`/api/leads?stage=${selectedStage}`);
+      const res = await apiFetch(`/api/leads?stage=${selectedStage}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 

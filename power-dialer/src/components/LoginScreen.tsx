@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { apiFetch } from "@/lib/api-client";
 
 interface Rep {
   id: string;
@@ -9,9 +10,14 @@ interface Rep {
   phone: string;
 }
 
-export default function LoginScreen({ onLogin }: { onLogin: (rep: Rep) => void }) {
+export default function LoginScreen({
+  onLogin,
+}: {
+  onLogin: (rep: Rep, apiKey: string) => void;
+}) {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [apiKey, setApiKeyInput] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -21,9 +27,13 @@ export default function LoginScreen({ onLogin }: { onLogin: (rep: Rep) => void }
     setLoading(true);
 
     try {
+      // Test the API key by making the auth call with it
       const res = await fetch("/api/auth", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(apiKey ? { "X-Dialer-Key": apiKey } : {}),
+        },
         body: JSON.stringify({ email, phone }),
       });
 
@@ -33,7 +43,7 @@ export default function LoginScreen({ onLogin }: { onLogin: (rep: Rep) => void }
         return;
       }
 
-      onLogin(data);
+      onLogin(data, apiKey);
     } catch {
       setError("Network error. Please try again.");
     } finally {
@@ -78,6 +88,22 @@ export default function LoginScreen({ onLogin }: { onLogin: (rep: Rep) => void }
             />
             <p className="text-xs text-gray-500 mt-1">
               We&apos;ll call this number when you start a dialing session
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1.5">
+              API Key
+            </label>
+            <input
+              type="password"
+              value={apiKey}
+              onChange={(e) => setApiKeyInput(e.target.value)}
+              placeholder="Your dialer API key"
+              className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Ask your admin for the API key. Not required in dev mode.
             </p>
           </div>
 

@@ -1,5 +1,9 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { validateEnv } from "@/lib/env";
+
+// Run env validation once at server startup
+validateEnv();
 
 export const metadata: Metadata = {
   title: "TCG Power Dialer",
