@@ -41,7 +41,8 @@ type Status =
   | "dialing"
   | "on_call"
   | "wrap_up"
-  | "ended";
+  | "ended"
+  | "monitoring";
 type Disposition =
   | "interested"
   | "callback"
@@ -103,13 +104,15 @@ export default function DialerDashboard({
   rep,
   leads,
   onEnd,
+  sessionId: initialSessionId,
 }: {
   rep: Rep;
   leads: Lead[];
   onEnd: () => void;
+  sessionId?: string;
 }) {
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [status, setStatus] = useState<Status>("idle");
+  const [sessionId, setSessionId] = useState<string | null>(initialSessionId || null);
+  const [status, setStatus] = useState<Status>(initialSessionId ? "monitoring" : "idle");
   const [currentLead, setCurrentLead] = useState<Lead | null>(null);
   const [callLog, setCallLog] = useState<CallLogEntry[]>([]);
   const [position, setPosition] = useState(0);
@@ -351,6 +354,7 @@ export default function DialerDashboard({
       on_call: { label: "Live Call", color: "bg-green-500", pulse: true },
       wrap_up: { label: "Wrap Up", color: "bg-orange-500", pulse: false },
       ended: { label: "Session Ended", color: "bg-gray-500", pulse: false },
+      monitoring: { label: "Claude Driving", color: "bg-purple-500", pulse: true },
     };
     const c = config[s];
     return (

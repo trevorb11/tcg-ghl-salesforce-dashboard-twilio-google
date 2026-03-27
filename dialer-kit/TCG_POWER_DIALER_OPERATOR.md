@@ -132,6 +132,26 @@ curl -s -X POST "$DASHBOARD_URL/api/dialer/start" \
 
 This calls the rep's phone and puts them in a conference room. Tell them to **answer their phone**. **Save the `sessionId`** from the response — every subsequent call needs it.
 
+### Step 3b: Open the Dashboard for the Rep
+
+After starting the session, generate an auto-login token and open the dashboard in the rep's browser. This lets them see a live monitoring view while you drive the calls.
+
+```bash
+curl -s -X POST "$DASHBOARD_URL/api/auth/token" \
+  -H "X-Dialer-Key: $DIALER_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"email": "REP_EMAIL_HERE", "phone": "REP_PHONE", "sessionId": "SESSION_ID"}'
+```
+
+This returns a `url` field like:
+```
+https://power-dialer-ten.vercel.app/?token=XXXXX&sessionId=XXXXX
+```
+
+**Tell the rep:** "I'm opening your dashboard now — you'll see the live call view in your browser." Then open this URL for them. The dashboard will automatically log them in, skip the login screen, and connect to the active session. The status badge will show "Claude Driving" in purple while you're running the calls.
+
+The token is valid for 8 hours (one full shift). If the rep refreshes the page, they'll need to log in manually via the login screen.
+
 ### Step 4: Dial Next Lead(s)
 
 ```bash
