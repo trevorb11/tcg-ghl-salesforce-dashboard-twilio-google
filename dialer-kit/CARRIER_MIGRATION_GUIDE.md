@@ -277,7 +277,7 @@ Then redeploy.
 
 Your SignalWire account is currently in **Trial Mode** ($4.50 balance). Before going live:
 
-1. Add a credit card at https://today-capital-group.signalwire.com/payment_methods
+1. Add a credit card at https://your-space.signalwire.com/payment_methods
 2. Top up your balance (recommend $50-100 to start)
 3. Trial mode limits: can only call verified numbers
 

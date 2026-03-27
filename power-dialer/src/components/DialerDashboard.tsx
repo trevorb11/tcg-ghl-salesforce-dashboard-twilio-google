@@ -19,7 +19,6 @@ interface Lead {
   phone: string;
   email: string;
   stageName: string;
-  // Extended DB fields
   _monthlyRevenue?: string;
   _industry?: string;
   _yearsInBusiness?: string;
@@ -72,6 +71,8 @@ interface CallLogEntry {
   duration?: number;
   startedAt: string;
   analysis?: CallAnalysis | null;
+  recordingUrl?: string | null;
+  recordingSid?: string | null;
 }
 
 interface DailySummary {
@@ -91,14 +92,14 @@ interface DailySummary {
   };
 }
 
-const DISPOSITIONS: { value: Disposition; label: string; color: string }[] = [
-  { value: "interested", label: "Interested", color: "bg-green-600" },
-  { value: "callback", label: "Callback", color: "bg-blue-600" },
-  { value: "not_interested", label: "Not Interested", color: "bg-orange-600" },
-  { value: "no_answer", label: "No Answer", color: "bg-gray-600" },
-  { value: "voicemail", label: "Voicemail", color: "bg-purple-600" },
-  { value: "wrong_number", label: "Wrong Number", color: "bg-red-600" },
-  { value: "disconnected", label: "Disconnected", color: "bg-red-800" },
+const DISPOSITIONS: { value: Disposition; label: string; color: string; icon: string }[] = [
+  { value: "interested", label: "Interested", color: "bg-green-600", icon: "🔥" },
+  { value: "callback", label: "Callback", color: "bg-blue-600", icon: "📞" },
+  { value: "not_interested", label: "Not Interested", color: "bg-orange-600", icon: "👎" },
+  { value: "no_answer", label: "No Answer", color: "bg-gray-600", icon: "📵" },
+  { value: "voicemail", label: "Voicemail", color: "bg-purple-600", icon: "📧" },
+  { value: "wrong_number", label: "Wrong Number", color: "bg-red-600", icon: "❌" },
+  { value: "disconnected", label: "Disconnected", color: "bg-red-800", icon: "🔌" },
 ];
 
 export default function DialerDashboard({
@@ -136,13 +137,20 @@ export default function DialerDashboard({
   const [loadingSummary, setLoadingSummary] = useState(false);
   const [expandedCallId, setExpandedCallId] = useState<string | null>(null);
 
-  // Dial mode config (set before starting session)
+  // Dial mode config
   const [dialMode, setDialMode] = useState<"single" | "multi">("single");
   const [linesCount, setLinesCount] = useState(3);
   const [batchInfo, setBatchInfo] = useState<{ linesDialed: number; connected: boolean; settled: boolean } | null>(null);
   const [dialingLeads, setDialingLeads] = useState<{ name: string; businessName: string; phone: string; callSid?: string }[]>([]);
 
-  // Poll session status
+  // Voicemail drop state
+  const [droppingVoicemail, setDroppingVoicemail] = useState(false);
+
+  // Recording playback state
+  const [playingRecordingId, setPlayingRecordingId] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // ── Poll session status ──────────────────────────────────
   const pollStatus = useCallback(async () => {
     if (!sessionId) return;
     try {
@@ -151,14 +159,10 @@ export default function DialerDashboard({
       const data = await res.json();
       setStatus(data.status);
       setCallLog(data.callLog || []);
-      if (data.currentLead) {
-        setCurrentLead(data.currentLead);
-      }
-      // Multi-line state
+      if (data.currentLead) setCurrentLead(data.currentLead);
       if (data.dialMode) setDialMode(data.dialMode);
       if (data.lines) setLinesCount(data.lines);
       if (data.batch) setBatchInfo(data.batch);
-      // If AI analysis came back via the backend, pick it up
       if (data.lastCallAnalysis && !lastAnalysis) {
         setLastAnalysis(data.lastCallAnalysis);
       }
@@ -189,6 +193,20 @@ export default function DialerDashboard({
     };
   }, [status]);
 
+  // WebRTC mode: sync browser call state with dialer status
+  useEffect(() => {
+    if (connectionMode !== "webrtc") return;
+
+    if (webrtc.callState === "active" && status === "dialing") {
+      setStatus("on_call");
+    } else if (
+      (webrtc.callState === "hangup" || webrtc.callState === "destroy" || webrtc.callState === "idle") &&
+      status === "on_call"
+    ) {
+      setStatus("wrap_up");
+    }
+  }, [webrtc.callState, status, connectionMode]);
+
   // Auto-trigger AI analysis when call moves to wrap_up
   useEffect(() => {
     if (status === "wrap_up" && sessionId && callLog.length > 0 && !analyzingCall && !lastAnalysis) {
@@ -197,10 +215,11 @@ export default function DialerDashboard({
         requestAnalysis(lastCall.id);
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, callLog.length]);
 
-  // Request AI analysis for a call
+  // ── Actions ──────────────────────────────────────────────
+
   async function requestAnalysis(callId: string) {
     if (!sessionId) return;
     setAnalyzingCall(true);
@@ -211,9 +230,7 @@ export default function DialerDashboard({
         body: JSON.stringify({ sessionId, callId }),
       });
       const data = await res.json();
-      if (data.analysis) {
-        setLastAnalysis(data.analysis);
-      }
+      if (data.analysis) setLastAnalysis(data.analysis);
     } catch (err) {
       console.error("Analysis request failed:", err);
     } finally {
@@ -221,7 +238,6 @@ export default function DialerDashboard({
     }
   }
 
-  // Start session
   async function startSession() {
     setError("");
     try {
@@ -243,9 +259,11 @@ export default function DialerDashboard({
       setSessionId(data.sessionId);
       setStatus("connecting_rep");
 
-      // WebRTC mode: connect the browser to SignalWire
       if (connectionMode === "webrtc" && data.webrtc) {
-        webrtc.connect(data.webrtc);
+        webrtc.connect({
+          ...data.webrtc,
+          callerNumber: data.callerNumber || process.env.NEXT_PUBLIC_SIGNALWIRE_PHONE || "",
+        });
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to start";
@@ -253,14 +271,49 @@ export default function DialerDashboard({
     }
   }
 
-  // Dial next lead
+  // Track the current lead index for WebRTC browser-driven dialing
+  const webrtcLeadIndexRef = useRef(0);
+
   async function dialNext() {
     if (!sessionId) return;
     setError("");
     setNotes("");
     setCallTimer(0);
     setLastAnalysis(null);
+    setDroppingVoicemail(false);
 
+    // WebRTC mode: browser makes the call directly
+    if (connectionMode === "webrtc" && webrtc.isConnected) {
+      const idx = webrtcLeadIndexRef.current;
+      if (idx >= leads.length) {
+        setStatus("ended");
+        return;
+      }
+
+      const lead = leads[idx];
+      webrtcLeadIndexRef.current = idx + 1;
+      setCurrentLead(lead);
+      setPosition(idx + 1);
+      setStatus("dialing");
+      setDialingLeads([]);
+
+      // Browser dials the lead directly — audio streams browser ↔ lead
+      webrtc.makeCall(lead.phone);
+
+      // Also notify the server so it can track the call in the session
+      try {
+        await apiFetch("/api/dialer/next", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId, webrtcDial: true, leadIndex: idx }),
+        });
+      } catch {
+        // Server tracking is best-effort — call still goes through
+      }
+      return;
+    }
+
+    // Phone mode: server makes the call
     try {
       const res = await apiFetch("/api/dialer/next", {
         method: "POST",
@@ -275,7 +328,6 @@ export default function DialerDashboard({
         return;
       }
 
-      // Multi-line: capture all leads being dialed
       if (data.dialMode === "multi" && data.leads) {
         setDialingLeads(data.leads);
         setDialMode("multi");
@@ -293,7 +345,6 @@ export default function DialerDashboard({
     }
   }
 
-  // Set disposition (can use AI suggestion or manual)
   async function setDisposition(disposition: Disposition) {
     if (!sessionId) return;
 
@@ -314,7 +365,62 @@ export default function DialerDashboard({
     }
   }
 
-  // Request daily summary
+  // ── Voicemail Drop ────────────────────────────────────────
+  async function dropVoicemail() {
+    if (!sessionId || droppingVoicemail) return;
+    setDroppingVoicemail(true);
+
+    try {
+      const res = await apiFetch("/api/dialer/voicemail-drop", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      // VM dropped — status will update via polling to wrap_up
+      setLastAnalysis(null);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to drop voicemail";
+      setError(msg);
+    } finally {
+      setDroppingVoicemail(false);
+    }
+  }
+
+  // ── Recording Playback ────────────────────────────────────
+  function toggleRecordingPlayback(entry: CallLogEntry) {
+    if (!entry.recordingUrl) return;
+
+    if (playingRecordingId === entry.id) {
+      // Stop playing
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+      setPlayingRecordingId(null);
+    } else {
+      // Stop any current playback
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+      // Start new playback
+      const audio = new Audio(entry.recordingUrl);
+      audio.onended = () => {
+        setPlayingRecordingId(null);
+        audioRef.current = null;
+      };
+      audio.onerror = () => {
+        setPlayingRecordingId(null);
+        audioRef.current = null;
+        setError("Failed to play recording");
+      };
+      audio.play();
+      audioRef.current = audio;
+      setPlayingRecordingId(entry.id);
+    }
+  }
+
   async function requestDailySummary() {
     if (!sessionId) return;
     setLoadingSummary(true);
@@ -335,7 +441,6 @@ export default function DialerDashboard({
     }
   }
 
-  // End session
   async function endSession() {
     if (!sessionId) return;
     try {
@@ -348,8 +453,15 @@ export default function DialerDashboard({
       // Best effort
     }
     webrtc.disconnect();
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+    setPlayingRecordingId(null);
     setStatus("ended");
   }
+
+  // ── Helpers ──────────────────────────────────────────────
 
   function formatTime(seconds: number): string {
     const m = Math.floor(seconds / 60);
@@ -358,9 +470,10 @@ export default function DialerDashboard({
   }
 
   function StatusBadge({ s }: { s: Status }) {
-    const dialingLabel = dialMode === "multi" && linesCount > 1
-      ? `Ringing ${linesCount} Lines...`
-      : "Ringing Lead...";
+    const dialingLabel =
+      dialMode === "multi" && linesCount > 1
+        ? `Ringing ${linesCount} Lines...`
+        : "Ringing Lead...";
     const config: Record<Status, { label: string; color: string; pulse: boolean }> = {
       idle: { label: "Ready", color: "bg-gray-500", pulse: false },
       connecting_rep: { label: "Connecting You...", color: "bg-yellow-500", pulse: true },
@@ -379,11 +492,68 @@ export default function DialerDashboard({
     );
   }
 
+  function DispositionBadge({ d }: { d?: string }) {
+    if (!d) return <span className="text-gray-600 text-xs">pending</span>;
+    const found = DISPOSITIONS.find((x) => x.value === d);
+    if (!found) return <span className="text-gray-400 text-xs">{d}</span>;
+    return (
+      <span
+        className={`${found.color} text-white text-[10px] font-medium px-2 py-0.5 rounded-full`}
+      >
+        {found.label}
+      </span>
+    );
+  }
+
+  function LeadContextCard({ lead }: { lead: Lead }) {
+    const fields = [
+      { label: "Industry", value: lead._industry },
+      { label: "Monthly Revenue", value: lead._monthlyRevenue },
+      { label: "Years in Business", value: lead._yearsInBusiness },
+      { label: "Amount Requested", value: lead._amountRequested },
+      { label: "Credit Score", value: lead._creditScore },
+      { label: "Previously Funded", value: lead._previouslyFunded },
+      { label: "Current Positions", value: lead._currentPositions },
+      { label: "Approval Letter", value: lead._approvalLetter },
+    ].filter((f) => f.value);
+
+    if (fields.length === 0 && !lead._lastNote && !lead._lastDisposition) return null;
+
+    return (
+      <div className="bg-gray-800/40 border border-gray-700/50 rounded-lg p-4 mt-3">
+        {fields.length > 0 && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+            {fields.map((f) => (
+              <div key={f.label}>
+                <p className="text-[10px] text-gray-500 uppercase tracking-wider">{f.label}</p>
+                <p className="text-sm text-gray-300 font-medium">{f.value}</p>
+              </div>
+            ))}
+          </div>
+        )}
+        {lead._lastDisposition && (
+          <div className="mb-2">
+            <span className="text-[10px] text-gray-500 uppercase tracking-wider">Last Disposition: </span>
+            <span className="text-xs text-gray-400">{lead._lastDisposition}</span>
+          </div>
+        )}
+        {lead._lastNote && (
+          <div>
+            <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-0.5">Last Note</p>
+            <p className="text-xs text-gray-400 line-clamp-3">{lead._lastNote}</p>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   const sentimentColor = {
     positive: "text-green-400",
     neutral: "text-gray-400",
     negative: "text-red-400",
   };
+
+  // ── RENDER ───────────────────────────────────────────────
 
   return (
     <div className="max-w-7xl mx-auto p-6">
@@ -419,11 +589,14 @@ export default function DialerDashboard({
       {error && (
         <div className="p-3 bg-red-900/50 border border-red-700 rounded-lg text-red-300 text-sm mb-4">
           {error}
+          <button onClick={() => setError("")} className="ml-2 text-red-400 hover:text-red-300">
+            &times;
+          </button>
         </div>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main Panel */}
+        {/* ── Main Panel ────────────────────────────────────── */}
         <div className="lg:col-span-2 space-y-4">
           {/* Start Button */}
           {status === "idle" && (
@@ -577,7 +750,6 @@ export default function DialerDashboard({
               {/* Current Lead Info */}
               {currentLead && (status === "dialing" || status === "on_call" || status === "wrap_up") ? (
                 <div className="mb-6">
-                  {/* Lead header + CRM links */}
                   <div className="flex items-center justify-between mb-4">
                     <div>
                       <h2 className="text-2xl font-bold">{currentLead.name}</h2>
@@ -626,7 +798,6 @@ export default function DialerDashboard({
                     </div>
                   </div>
 
-                  {/* Contact context card */}
                   <LeadContextCard lead={currentLead} />
                 </div>
               ) : (
@@ -653,7 +824,6 @@ export default function DialerDashboard({
               {status === "dialing" && (
                 <div className="py-4">
                   {dialMode === "multi" && dialingLeads.length > 1 ? (
-                    /* Multi-line: show all lines ringing */
                     <div>
                       <div className="flex items-center justify-center gap-2 mb-4">
                         <div className="w-6 h-6 border-3 border-blue-500 border-t-transparent rounded-full animate-spin" />
@@ -680,7 +850,6 @@ export default function DialerDashboard({
                       </div>
                     </div>
                   ) : (
-                    /* Single line */
                     <div className="text-center">
                       <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
                       <p className="text-blue-400 font-medium">
@@ -691,35 +860,68 @@ export default function DialerDashboard({
                 </div>
               )}
 
-              {/* On Call indicator */}
+              {/* On Call indicator + Voicemail Drop + Mute */}
               {status === "on_call" && (
                 <div className="text-center py-4">
                   <div className="w-4 h-4 bg-green-500 rounded-full animate-pulse mx-auto mb-2" />
                   <p className="text-green-400 font-medium text-lg">
                     Connected{dialMode === "multi" && currentLead ? ` with ${currentLead.name}` : ""} — You&apos;re live!
                   </p>
-                  {/* Mute button (WebRTC mode) */}
-                  {connectionMode === "webrtc" && (
+                  <div className="flex items-center justify-center gap-3 mt-4">
+                    {/* Mute button (WebRTC mode) */}
+                    {connectionMode === "webrtc" && (
+                      <button
+                        onClick={webrtc.toggleMute}
+                        className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                          webrtc.isMuted
+                            ? "bg-red-600 hover:bg-red-700 text-white"
+                            : "bg-gray-700 hover:bg-gray-600 text-gray-300"
+                        }`}
+                      >
+                        {webrtc.isMuted ? "Unmute" : "Mute"}
+                      </button>
+                    )}
+                    {/* VOICEMAIL DROP BUTTON */}
                     <button
-                      onClick={webrtc.toggleMute}
-                      className={`mt-3 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                        webrtc.isMuted
-                          ? "bg-red-600 hover:bg-red-700 text-white"
-                          : "bg-gray-700 hover:bg-gray-600 text-gray-300"
-                      }`}
+                      onClick={dropVoicemail}
+                      disabled={droppingVoicemail}
+                      className="px-5 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-800 disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition-colors flex items-center gap-2"
                     >
-                      {webrtc.isMuted ? "Unmute" : "Mute"}
+                      {droppingVoicemail ? (
+                        <>
+                          <div className="w-3.5 h-3.5 border-2 border-white/50 border-t-white rounded-full animate-spin" />
+                          Dropping VM...
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-base leading-none">📧</span>
+                          Drop Voicemail
+                        </>
+                      )}
                     </button>
-                  )}
+                  </div>
+                </div>
+              )}
+
+              {/* Voicemail Drop button also available during dialing (for when it hits VM before connecting) */}
+              {status === "dialing" && (
+                <div className="mt-3 text-center">
+                  <button
+                    onClick={dropVoicemail}
+                    disabled={droppingVoicemail}
+                    className="px-4 py-2 bg-purple-600/70 hover:bg-purple-600 disabled:opacity-50 text-white text-xs font-medium rounded-lg transition-colors inline-flex items-center gap-1.5"
+                  >
+                    {droppingVoicemail ? "Dropping VM..." : "Drop VM & Move On"}
+                  </button>
                 </div>
               )}
             </div>
           )}
 
-          {/* Disposition + AI Analysis Panel */}
+          {/* ── Disposition + AI Analysis Panel ─────────────── */}
           {(status === "wrap_up" || status === "on_call") && (
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
-              {/* AI Analysis (if available) */}
+              {/* AI Analysis loading */}
               {analyzingCall && (
                 <div className="flex items-center gap-3 mb-4 p-3 bg-blue-900/20 border border-blue-800/50 rounded-lg">
                   <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
@@ -779,7 +981,7 @@ export default function DialerDashboard({
                 </div>
               )}
 
-              {/* Manual Disposition Buttons */}
+              {/* ── Quick Disposition Buttons ─────────────────── */}
               <h3 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-3">
                 {lastAnalysis ? "Or choose manually:" : "Call Disposition"}
               </h3>
@@ -788,12 +990,15 @@ export default function DialerDashboard({
                   <button
                     key={d.value}
                     onClick={() => setDisposition(d.value)}
-                    className={`${d.color} hover:opacity-80 text-white text-sm font-medium py-2.5 px-3 rounded-lg transition-opacity`}
+                    className={`${d.color} hover:opacity-80 text-white text-sm font-medium py-3 px-3 rounded-lg transition-opacity flex items-center justify-center gap-1.5`}
                   >
+                    <span className="text-base leading-none">{d.icon}</span>
                     {d.label}
                   </button>
                 ))}
               </div>
+
+              {/* Notes */}
               <textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
@@ -804,10 +1009,9 @@ export default function DialerDashboard({
             </div>
           )}
 
-          {/* Session Ended — AI Daily Summary */}
+          {/* ── Session Ended — AI Daily Summary ────────────── */}
           {status === "ended" && (
             <div className="space-y-4">
-              {/* Stats cards */}
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
                 <h2 className="text-xl font-semibold mb-4">Session Complete</h2>
                 <div className="grid grid-cols-4 gap-3 mb-4">
@@ -835,7 +1039,6 @@ export default function DialerDashboard({
                   </div>
                 </div>
 
-                {/* Generate Summary Button */}
                 {!dailySummary && (
                   <button
                     onClick={requestDailySummary}
@@ -854,7 +1057,6 @@ export default function DialerDashboard({
                 )}
               </div>
 
-              {/* AI Daily Summary */}
               {dailySummary && (
                 <div className="bg-gray-900 border border-blue-800/30 rounded-xl p-6">
                   <h3 className="text-lg font-semibold mb-1 flex items-center gap-2">
@@ -906,7 +1108,7 @@ export default function DialerDashboard({
           )}
         </div>
 
-        {/* Right Panel — Call Log */}
+        {/* ── Right Panel — Call Log with Recording Playback ── */}
         <div className="lg:col-span-1">
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
             <h3 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-3">
@@ -931,6 +1133,11 @@ export default function DialerDashboard({
                         {entry.leadName}
                       </span>
                       <div className="flex items-center gap-1.5">
+                        {entry.recordingUrl && (
+                          <span className="text-[10px] bg-gray-600/30 text-gray-400 px-1.5 py-0.5 rounded">
+                            REC
+                          </span>
+                        )}
                         {entry.analysis && (
                           <span className="text-[10px] bg-blue-600/20 text-blue-400 px-1.5 py-0.5 rounded">
                             AI
@@ -959,25 +1166,72 @@ export default function DialerDashboard({
                       )}
                     </div>
 
-                    {/* Expanded AI details */}
-                    {expandedCallId === entry.id && entry.analysis && (
+                    {/* ── Expanded Call Details ────────────────── */}
+                    {expandedCallId === entry.id && (
                       <div className="mt-2 pt-2 border-t border-gray-700 text-xs">
-                        <p className="text-gray-300 mb-1.5">
-                          {entry.analysis.summary}
-                        </p>
-                        {entry.analysis.keyPoints.length > 0 && (
-                          <ul className="text-gray-400 space-y-0.5 mb-1.5">
-                            {entry.analysis.keyPoints.map((p, i) => (
-                              <li key={i}>- {p}</li>
-                            ))}
-                          </ul>
-                        )}
-                        {entry.analysis.followUpActions.length > 0 && (
-                          <div className="text-blue-400">
-                            {entry.analysis.followUpActions.map((a, i) => (
-                              <p key={i}>* {a}</p>
-                            ))}
+                        {/* Recording Playback */}
+                        {entry.recordingUrl && (
+                          <div className="mb-3">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleRecordingPlayback(entry);
+                              }}
+                              className={`w-full flex items-center justify-center gap-2 py-2 rounded-md text-xs font-medium transition-colors ${
+                                playingRecordingId === entry.id
+                                  ? "bg-red-600/30 text-red-300 hover:bg-red-600/40 border border-red-700/50"
+                                  : "bg-green-600/20 text-green-300 hover:bg-green-600/30 border border-green-700/50"
+                              }`}
+                            >
+                              {playingRecordingId === entry.id ? (
+                                <>
+                                  <span className="w-2.5 h-2.5 bg-red-400 rounded-sm" />
+                                  Stop Recording
+                                </>
+                              ) : (
+                                <>
+                                  <span className="text-sm leading-none">&#9654;</span>
+                                  Play Recording
+                                </>
+                              )}
+                            </button>
                           </div>
+                        )}
+
+                        {/* AI Analysis details */}
+                        {entry.analysis && (
+                          <>
+                            <p className="text-gray-300 mb-1.5">
+                              {entry.analysis.summary}
+                            </p>
+                            {entry.analysis.keyPoints.length > 0 && (
+                              <ul className="text-gray-400 space-y-0.5 mb-1.5">
+                                {entry.analysis.keyPoints.map((p, i) => (
+                                  <li key={i} className="flex gap-1.5">
+                                    <span className="text-gray-600 shrink-0">-</span>
+                                    <span>{p}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                            {entry.analysis.followUpActions.length > 0 && (
+                              <ul className="text-gray-400 space-y-0.5">
+                                {entry.analysis.followUpActions.map((a, i) => (
+                                  <li key={i} className="flex gap-1.5">
+                                    <span className="text-blue-500 shrink-0">*</span>
+                                    <span>{a}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </>
+                        )}
+
+                        {/* No analysis and no recording */}
+                        {!entry.analysis && !entry.recordingUrl && (
+                          <p className="text-gray-600 text-center py-2">
+                            No analysis or recording available
+                          </p>
                         )}
                       </div>
                     )}
@@ -989,92 +1243,5 @@ export default function DialerDashboard({
         </div>
       </div>
     </div>
-  );
-}
-
-// ── Lead Context Card ──────────────────────────────────────
-// Shows enriched CRM data when a lead is on a call
-function LeadContextCard({ lead }: { lead: Lead }) {
-  const fields = [
-    { label: "Stage", value: lead.stageName },
-    { label: "Email", value: lead.email },
-    { label: "Monthly Revenue", value: lead._monthlyRevenue },
-    { label: "Industry", value: lead._industry },
-    { label: "Years in Business", value: lead._yearsInBusiness },
-    { label: "Amount Requested", value: lead._amountRequested },
-    { label: "Credit Score", value: lead._creditScore },
-    { label: "Previously Funded", value: lead._previouslyFunded },
-    { label: "Current Positions", value: lead._currentPositions },
-    { label: "Last Disposition", value: lead._lastDisposition },
-  ].filter((f) => f.value);
-
-  const hasNote = lead._lastNote;
-  const hasTags = lead.tags && lead.tags.length > 0;
-
-  if (fields.length === 0 && !hasNote && !hasTags) return null;
-
-  return (
-    <div className="bg-gray-800/40 border border-gray-700/50 rounded-lg p-4">
-      {/* Tags */}
-      {hasTags && (
-        <div className="flex flex-wrap gap-1.5 mb-3">
-          {lead.tags!.map((tag, i) => (
-            <span
-              key={i}
-              className="px-2 py-0.5 bg-gray-700/60 text-gray-300 text-[11px] rounded-full"
-            >
-              {tag}
-            </span>
-          ))}
-        </div>
-      )}
-
-      {/* CRM fields grid */}
-      {fields.length > 0 && (
-        <div className="grid grid-cols-2 gap-x-6 gap-y-2 mb-3">
-          {fields.map((f, i) => (
-            <div key={i} className="flex items-baseline justify-between gap-2">
-              <span className="text-[11px] text-gray-500 uppercase tracking-wider shrink-0">
-                {f.label}
-              </span>
-              <span className="text-sm text-gray-300 text-right truncate">
-                {f.value}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Last note */}
-      {hasNote && (
-        <div className="pt-2 border-t border-gray-700/50">
-          <p className="text-[11px] text-gray-500 uppercase tracking-wider mb-1">
-            Last Note
-          </p>
-          <p className="text-xs text-gray-400 leading-relaxed line-clamp-3">
-            {lead._lastNote}
-          </p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Disposition Badge ──────────────────────────────────────
-function DispositionBadge({ d }: { d?: string }) {
-  if (!d) return <span className="text-xs text-gray-600">pending</span>;
-  const colors: Record<string, string> = {
-    interested: "text-green-400",
-    callback: "text-blue-400",
-    not_interested: "text-orange-400",
-    no_answer: "text-gray-400",
-    voicemail: "text-purple-400",
-    wrong_number: "text-red-400",
-    disconnected: "text-red-400",
-  };
-  return (
-    <span className={`text-xs font-medium ${colors[d] || "text-gray-400"}`}>
-      {d.replace("_", " ")}
-    </span>
   );
 }

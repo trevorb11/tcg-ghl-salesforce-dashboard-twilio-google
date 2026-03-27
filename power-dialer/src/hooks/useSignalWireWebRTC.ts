@@ -6,15 +6,19 @@ interface WebRTCConfig {
   token: string;
   resource: string;
   project: string;
+  callerNumber: string; // The SignalWire phone number to use as caller ID
 }
 
 interface UseSignalWireWebRTCReturn {
   isConnected: boolean;
   isOnCall: boolean;
   isMuted: boolean;
+  callState: string;
   error: string | null;
   connect: (config: WebRTCConfig) => void;
   disconnect: () => void;
+  makeCall: (phoneNumber: string) => void;
+  hangupCall: () => void;
   toggleMute: () => void;
 }
 
@@ -22,15 +26,16 @@ export function useSignalWireWebRTC(): UseSignalWireWebRTCReturn {
   const [isConnected, setIsConnected] = useState(false);
   const [isOnCall, setIsOnCall] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [callState, setCallState] = useState("idle");
   const [error, setError] = useState<string | null>(null);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const clientRef = useRef<any>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const currentCallRef = useRef<any>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const configRef = useRef<WebRTCConfig | null>(null);
 
-  // Create a hidden audio element for remote audio
+  // Create hidden audio element for remote audio
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -41,7 +46,6 @@ export function useSignalWireWebRTC(): UseSignalWireWebRTCReturn {
       el.autoplay = true;
       document.body.appendChild(el);
     }
-    audioRef.current = el;
 
     return () => {
       if (clientRef.current) {
@@ -52,9 +56,9 @@ export function useSignalWireWebRTC(): UseSignalWireWebRTCReturn {
 
   const connect = useCallback(async (config: WebRTCConfig) => {
     setError(null);
+    configRef.current = config;
 
     try {
-      // Dynamically import to avoid SSR issues
       const { Relay } = await import("@signalwire/js");
 
       const client = new Relay({
@@ -62,13 +66,13 @@ export function useSignalWireWebRTC(): UseSignalWireWebRTCReturn {
         token: config.token,
       });
 
-      // Configure for audio only
+      // Audio only
       client.remoteElement = "sw-remote-audio";
       client.enableMicrophone();
       client.disableWebcam();
 
       client.on("signalwire.ready", () => {
-        console.log("[WebRTC] Connected to SignalWire");
+        console.log("[WebRTC] Connected to SignalWire, ready to make calls");
         setIsConnected(true);
         setError(null);
       });
@@ -82,30 +86,40 @@ export function useSignalWireWebRTC(): UseSignalWireWebRTCReturn {
         console.log("[WebRTC] Disconnected");
         setIsConnected(false);
         setIsOnCall(false);
+        setCallState("idle");
       });
 
-      // Handle inbound calls (server calls our WebRTC client into the conference)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       client.on("signalwire.notification", (notification: any) => {
         if (notification.type === "callUpdate") {
           const call = notification.call;
-          console.log("[WebRTC] Call state:", call.prevState, "->", call.state);
+          const prevState = call.prevState || "unknown";
+          console.log(`[WebRTC] Call: ${prevState} -> ${call.state}`);
+          setCallState(call.state);
 
           switch (call.state) {
-            case "ringing":
-              // Auto-answer inbound calls (server calling us into conference)
-              console.log("[WebRTC] Auto-answering inbound call");
-              call.answer();
+            case "trying":
+              // Outbound call initiated
               currentCallRef.current = call;
               break;
+            case "early":
+              // Ringing / early media
+              break;
             case "active":
+              // Call connected — lead answered!
               setIsOnCall(true);
               currentCallRef.current = call;
               break;
             case "hangup":
             case "destroy":
               setIsOnCall(false);
+              setCallState("idle");
               currentCallRef.current = null;
+              break;
+            case "ringing":
+              // Inbound call — auto-answer (fallback for conference mode)
+              call.answer();
+              currentCallRef.current = call;
               break;
           }
         }
@@ -124,19 +138,58 @@ export function useSignalWireWebRTC(): UseSignalWireWebRTCReturn {
     }
   }, []);
 
-  const disconnect = useCallback(() => {
+  // Make an outbound call directly from the browser
+  const makeCall = useCallback((phoneNumber: string) => {
+    const client = clientRef.current;
+    const config = configRef.current;
+
+    if (!client || !config) {
+      setError("Not connected to SignalWire. Please wait for connection.");
+      return;
+    }
+
+    setError(null);
+    setCallState("trying");
+
+    try {
+      console.log(`[WebRTC] Dialing ${phoneNumber} from ${config.callerNumber}`);
+      client.newCall({
+        destinationNumber: phoneNumber,
+        callerNumber: config.callerNumber,
+        audio: true,
+        video: false,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to initiate call";
+      console.error("[WebRTC] Call error:", msg);
+      setError(msg);
+      setCallState("idle");
+    }
+  }, []);
+
+  // Hang up the current call
+  const hangupCall = useCallback(() => {
     if (currentCallRef.current) {
-      try { currentCallRef.current.hangup(); } catch { /* cleanup */ }
+      try {
+        currentCallRef.current.hangup();
+      } catch {
+        // Already ended
+      }
       currentCallRef.current = null;
     }
+    setIsOnCall(false);
+    setCallState("idle");
+    setIsMuted(false);
+  }, []);
+
+  const disconnect = useCallback(() => {
+    hangupCall();
     if (clientRef.current) {
       try { clientRef.current.disconnect(); } catch { /* cleanup */ }
       clientRef.current = null;
     }
     setIsConnected(false);
-    setIsOnCall(false);
-    setIsMuted(false);
-  }, []);
+  }, [hangupCall]);
 
   const toggleMute = useCallback(() => {
     if (currentCallRef.current) {
@@ -149,5 +202,8 @@ export function useSignalWireWebRTC(): UseSignalWireWebRTCReturn {
     }
   }, [isMuted]);
 
-  return { isConnected, isOnCall, isMuted, error, connect, disconnect, toggleMute };
+  return {
+    isConnected, isOnCall, isMuted, callState, error,
+    connect, disconnect, makeCall, hangupCall, toggleMute,
+  };
 }

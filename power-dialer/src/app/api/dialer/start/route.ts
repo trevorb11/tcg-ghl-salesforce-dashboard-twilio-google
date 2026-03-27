@@ -12,7 +12,7 @@
 //   - "multi": dials N leads in parallel, connects the first to answer
 
 import { NextRequest, NextResponse } from "next/server";
-import { callRepIntoConference, callWebRTCClientIntoConference, generateWebRTCToken, getActiveCarrier } from "@/lib/carrier";
+import { callRepIntoConference, callWebRTCClientIntoConference, generateWebRTCToken, getActiveCarrier, getCarrierConfig } from "@/lib/carrier";
 import { type DialerSession, type DialMode, type Lead } from "@/lib/types";
 import { getSession, saveSession, deleteSession } from "@/lib/session-store";
 import { requireAuth } from "@/lib/auth";
@@ -82,6 +82,10 @@ export async function POST(req: NextRequest) {
       const webrtc = await generateWebRTCToken(repId);
       session.webrtcResource = webrtc.resource;
 
+      const carrierConfig = getCarrierConfig();
+
+      await saveSession(session);
+
       return NextResponse.json({
         sessionId,
         conferenceName,
@@ -91,6 +95,7 @@ export async function POST(req: NextRequest) {
         dialMode: mode,
         lines: lineCount,
         connectionMode: "webrtc",
+        callerNumber: carrierConfig.phoneNumber,
         webrtc: {
           token: webrtc.token,
           resource: webrtc.resource,
