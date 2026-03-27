@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "tcg-power-dialer": {
+      "command": "npx",
+      "args": ["tsx", "/path/to/power-dialer/src/mcp/stdio.ts"],
+      "env": {
+        "TWILIO_ACCOUNT_SID": "your_twilio_account_sid",
+        "TWILIO_AUTH_TOKEN": "your_twilio_auth_token",
+        "TWILIO_PHONE_NUMBER": "+1XXXXXXXXXX",
+        "GHL_API_KEY": "your_ghl_pit_token",
+        "GHL_LOCATION_ID": "n778xwOps9t8Q34eRPfM",
+        "ANTHROPIC_API_KEY": "your_anthropic_api_key",
+        "NEXT_PUBLIC_APP_URL": "https://your-deployed-app-url.com"
+      }
+    }
+  }
+}
