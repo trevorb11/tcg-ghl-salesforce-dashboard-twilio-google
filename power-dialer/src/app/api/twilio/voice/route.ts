@@ -22,11 +22,15 @@ function generateTwiML(action: string, conferenceName: string, role: string, ses
       ? `${appUrl}/api/twilio/recording?sessionId=${encodeURIComponent(sessionId)}`
       : `${appUrl}/api/twilio/recording`;
 
+    // Both rep and lead can start the conference (startConferenceOnEnter=true)
+    // This prevents the timing issue where a lead answers before the
+    // WebRTC browser client has fully joined as moderator.
+    // Only the rep's exit ends the conference (endConferenceOnExit).
     return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Dial>
     <Conference
-      startConferenceOnEnter="${isRep}"
+      startConferenceOnEnter="true"
       endConferenceOnExit="${isRep}"
       record="record-from-start"
       recordingStatusCallback="${recordingCallback}"
