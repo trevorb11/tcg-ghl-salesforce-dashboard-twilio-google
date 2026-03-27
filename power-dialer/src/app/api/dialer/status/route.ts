@@ -35,16 +35,21 @@ export async function GET(req: NextRequest) {
       : null,
     lastCallStatus: lastCall?.status || null,
     lastCallDisposition: lastCall?.disposition || null,
+    lastCallId: lastCall?.id || null,
+    lastCallAnalysis: lastCall?.analysis || null,
+    lastCallHasRecording: !!lastCall?.recordingSid,
     position: session.currentLeadIndex + 1,
     total: session.leads.length,
     callsCompleted: session.callLog.filter((c) => c.endedAt).length,
     callLog: session.callLog.map((c) => ({
+      id: c.id,
       leadName: c.leadName,
       leadBusinessName: c.leadBusinessName,
       status: c.status,
       disposition: c.disposition,
       duration: c.duration,
       startedAt: c.startedAt,
+      analysis: c.analysis || null,
     })),
   });
 }

@@ -24,12 +24,14 @@ export const twilioClient = twilio(accountSid, authToken);
 // Step 1: Call the rep and put them in a conference
 export async function callRepIntoConference(
   repPhone: string,
-  conferenceName: string
+  conferenceName: string,
+  sessionId?: string
 ): Promise<string> {
+  const sessionParam = sessionId ? `&sessionId=${encodeURIComponent(sessionId)}` : "";
   const call = await twilioClient.calls.create({
     to: repPhone,
     from: twilioPhone,
-    url: `${appUrl}/api/twilio/voice?action=join_conference&conference=${encodeURIComponent(conferenceName)}&role=rep`,
+    url: `${appUrl}/api/twilio/voice?action=join_conference&conference=${encodeURIComponent(conferenceName)}&role=rep${sessionParam}`,
     statusCallback: `${appUrl}/api/twilio/status`,
     statusCallbackEvent: ["initiated", "ringing", "answered", "completed"],
     statusCallbackMethod: "POST",
@@ -48,7 +50,7 @@ export async function dialLeadIntoConference(
   const call = await twilioClient.calls.create({
     to: leadPhone,
     from: twilioPhone,
-    url: `${appUrl}/api/twilio/voice?action=join_conference&conference=${encodeURIComponent(conferenceName)}&role=lead`,
+    url: `${appUrl}/api/twilio/voice?action=join_conference&conference=${encodeURIComponent(conferenceName)}&role=lead&sessionId=${encodeURIComponent(sessionId)}`,
     statusCallback: `${appUrl}/api/twilio/status?leadId=${leadId}&sessionId=${sessionId}`,
     statusCallbackEvent: ["initiated", "ringing", "answered", "completed"],
     statusCallbackMethod: "POST",

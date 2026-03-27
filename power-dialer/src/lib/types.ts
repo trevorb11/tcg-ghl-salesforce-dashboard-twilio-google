@@ -43,6 +43,16 @@ export type Disposition =
   | "wrong_number"
   | "disconnected";
 
+export interface CallAnalysis {
+  summary: string;
+  disposition: Disposition;
+  dispositionReason: string;
+  keyPoints: string[];
+  followUpActions: string[];
+  leadSentiment: "positive" | "neutral" | "negative";
+  ghlNote: string;
+}
+
 export interface CallRecord {
   id: string;
   leadId: string;
@@ -55,6 +65,9 @@ export interface CallRecord {
   notes?: string;
   duration?: number;
   recordingUrl?: string;
+  recordingSid?: string;
+  transcription?: string;
+  analysis?: CallAnalysis;
   twilioCallSid?: string;
   startedAt: string;
   endedAt?: string;
@@ -63,6 +76,7 @@ export interface CallRecord {
 export interface DialerSession {
   id: string;
   repId: string;
+  repName: string;
   repPhone: string;
   conferenceName: string;
   conferenceCallSid?: string; // SID of the rep's call in conference

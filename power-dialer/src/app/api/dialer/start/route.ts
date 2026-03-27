@@ -30,6 +30,7 @@ export async function POST(req: NextRequest) {
   const session: DialerSession = {
     id: sessionId,
     repId,
+    repName: repName || repId,
     repPhone,
     conferenceName,
     leads,
@@ -43,7 +44,7 @@ export async function POST(req: NextRequest) {
 
   try {
     // Call the rep first — they join the conference and wait
-    const repCallSid = await callRepIntoConference(repPhone, conferenceName);
+    const repCallSid = await callRepIntoConference(repPhone, conferenceName, sessionId);
     session.conferenceCallSid = repCallSid;
     session.status = "connecting_rep";
 
