@@ -24,6 +24,20 @@ export interface Lead {
   opportunityId?: string;
   tags?: string[];
   lastContactedAt?: string;
+  // Extended DB fields for contact card
+  _monthlyRevenue?: string;
+  _industry?: string;
+  _yearsInBusiness?: string;
+  _amountRequested?: string;
+  _creditScore?: string;
+  _lastNote?: string;
+  _lastDisposition?: string;
+  _approvalLetter?: string;
+  _previouslyFunded?: string;
+  _currentPositions?: string;
+  _salesforceId?: string;
+  _salesforceType?: string;
+  [key: string]: unknown; // Allow additional fields
 }
 
 export type CallStatus =
@@ -100,6 +114,10 @@ export interface DialerSession {
   status: "idle" | "connecting_rep" | "dialing" | "on_call" | "wrap_up" | "ended";
   startedAt: string;
   endedAt?: string;
+
+  // Connection mode
+  connectionMode: "phone" | "webrtc"; // How the rep connects
+  webrtcResource?: string;            // SIP resource for WebRTC client
 
   // Multi-line dialing
   dialMode: DialMode;       // "single" (default) or "multi"

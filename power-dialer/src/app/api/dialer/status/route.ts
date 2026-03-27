@@ -6,7 +6,7 @@
 // gives visibility into parallel dialing state.
 
 import { NextRequest, NextResponse } from "next/server";
-import { sessions } from "@/lib/types";
+import { sessions, type Lead } from "@/lib/types";
 import { requireAuth } from "@/lib/auth";
 
 export async function GET(req: NextRequest) {
@@ -27,28 +27,38 @@ export async function GET(req: NextRequest) {
   // (the batch winner), not just the last lead index.
   let currentLead = null;
 
-  if (session.dialMode === "multi" && session.currentBatch?.connectedLeadIndex != null) {
-    const connectedLead = session.leads[session.currentBatch.connectedLeadIndex];
-    if (connectedLead) {
-      currentLead = {
-        name: connectedLead.name,
-        businessName: connectedLead.businessName,
-        phone: connectedLead.phone,
-        email: connectedLead.email,
-        stageName: connectedLead.stageName,
-        tags: connectedLead.tags,
-      };
-    }
-  } else if (session.currentLeadIndex >= 0 && session.currentLeadIndex < session.leads.length) {
-    const lead = session.leads[session.currentLeadIndex];
-    currentLead = {
+  // Helper to serialize a lead with all CRM context fields
+  function serializeLead(lead: Lead) {
+    return {
       name: lead.name,
       businessName: lead.businessName,
       phone: lead.phone,
       email: lead.email,
       stageName: lead.stageName,
       tags: lead.tags,
+      // Extended CRM fields for LeadContextCard
+      _monthlyRevenue: lead._monthlyRevenue,
+      _industry: lead._industry,
+      _yearsInBusiness: lead._yearsInBusiness,
+      _amountRequested: lead._amountRequested,
+      _creditScore: lead._creditScore,
+      _lastNote: lead._lastNote,
+      _lastDisposition: lead._lastDisposition,
+      _approvalLetter: lead._approvalLetter,
+      _previouslyFunded: lead._previouslyFunded,
+      _currentPositions: lead._currentPositions,
+      _salesforceId: lead._salesforceId,
+      _salesforceType: lead._salesforceType,
     };
+  }
+
+  if (session.dialMode === "multi" && session.currentBatch?.connectedLeadIndex != null) {
+    const connectedLead = session.leads[session.currentBatch.connectedLeadIndex];
+    if (connectedLead) {
+      currentLead = serializeLead(connectedLead);
+    }
+  } else if (session.currentLeadIndex >= 0 && session.currentLeadIndex < session.leads.length) {
+    currentLead = serializeLead(session.leads[session.currentLeadIndex]);
   }
 
   const lastCall = session.callLog[session.callLog.length - 1] || null;

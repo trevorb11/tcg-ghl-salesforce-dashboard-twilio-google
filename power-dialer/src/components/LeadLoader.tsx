@@ -28,21 +28,32 @@ interface StageGroup {
   stages: { key: string; label: string }[];
 }
 
+// Stage groups matching actual GHL pipelines and DB data
 const REP_STAGE_GROUPS: StageGroup[] = [
   {
-    label: "Absent / Cold Leads",
-    stages: [
-      { key: "missing_in_action", label: "Missing In Action" },
-      { key: "no_use_at_moment", label: "No Use At The Moment" },
-      { key: "low_revenue", label: "Low Revenue" },
-    ],
-  },
-  {
-    label: "App Sent (Warm)",
+    label: "1. App Sent (Warm)",
     stages: [
       { key: "new_opportunity", label: "New Opportunity" },
       { key: "waiting_for_app", label: "Waiting for App/Statements" },
       { key: "second_attempt", label: "2nd Attempt" },
+      { key: "follow_up_30", label: "Follow Up 30 Days" },
+    ],
+  },
+  {
+    label: "2. App Sent (Cold)",
+    stages: [
+      { key: "missing_in_action", label: "Missing In Action" },
+      { key: "no_use_at_moment", label: "No Use At The Moment" },
+      { key: "low_revenue", label: "Low Revenue" },
+      { key: "unrealistic", label: "Unrealistic" },
+      { key: "default_cold", label: "Default" },
+    ],
+  },
+  {
+    label: "Hold / Follow-Up",
+    stages: [
+      { key: "hold", label: "Hold" },
+      { key: "follow_up", label: "Follow Up Date Has Hit" },
     ],
   },
   {
@@ -53,19 +64,12 @@ const REP_STAGE_GROUPS: StageGroup[] = [
       { key: "renewal", label: "Renewal Prospecting" },
     ],
   },
-  {
-    label: "Hold / Follow-Up",
-    stages: [
-      { key: "hold", label: "Hold" },
-      { key: "follow_up", label: "Follow Up Date Has Hit" },
-    ],
-  },
 ];
 
 const ADMIN_STAGE_GROUPS: StageGroup[] = [
   ...REP_STAGE_GROUPS,
   {
-    label: "Marketing Leads",
+    label: "0. Marketing Leads",
     stages: [
       { key: "intake_form", label: "Intake Form Submitted" },
       { key: "application_started", label: "Application Started" },
@@ -83,7 +87,7 @@ const ADMIN_STAGE_GROUPS: StageGroup[] = [
     ],
   },
   {
-    label: "Pipeline (All Stages)",
+    label: "Pipeline (Extended)",
     stages: [
       { key: "contracts_signed", label: "Contracts Signed" },
       { key: "additional_stips", label: "Additional Stips Needed" },
@@ -92,19 +96,32 @@ const ADMIN_STAGE_GROUPS: StageGroup[] = [
     ],
   },
   {
-    label: "Cold / Graveyard",
+    label: "Pipeline (Cold)",
     stages: [
-      { key: "unrealistic", label: "Unrealistic" },
+      { key: "unqualified", label: "Unqualified" },
+      { key: "declined", label: "Declined" },
       { key: "funded_elsewhere", label: "Funded Elsewhere" },
       { key: "dead_deal", label: "Killed In Final / Dead Deal" },
-      { key: "declined", label: "Declined" },
+      { key: "balances_too_high", label: "Balances Too High" },
+    ],
+  },
+  {
+    label: "SBA Pipeline",
+    stages: [
+      { key: "sba_referral", label: "Referral In" },
+      { key: "sba_prequalified", label: "Prequalified" },
+    ],
+  },
+  {
+    label: "Graveyard",
+    stages: [
       { key: "disconnected", label: "Disconnected #" },
       { key: "do_not_contact", label: "Do Not Contact" },
     ],
   },
 ];
 
-type LoadMode = "ghl" | "upload";
+type LoadMode = "pipeline" | "custom" | "upload" | "dialpad";
 
 export default function LeadLoader({
   rep,
@@ -114,7 +131,7 @@ export default function LeadLoader({
   onLeadsLoaded: (leads: Lead[]) => void;
 }) {
   const STAGE_GROUPS = rep.role === "admin" ? ADMIN_STAGE_GROUPS : REP_STAGE_GROUPS;
-  const [mode, setMode] = useState<LoadMode>("ghl");
+  const [mode, setMode] = useState<LoadMode>("pipeline");
   const [selectedCategory, setSelectedCategory] = useState("");
   const [selectedStage, setSelectedStage] = useState("");
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -122,7 +139,23 @@ export default function LeadLoader({
   const [error, setError] = useState("");
   const [loaded, setLoaded] = useState(false);
   const [skippedCount, setSkippedCount] = useState(0);
+  const [listLabel, setListLabel] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Dialpad state
+  const [dialpadNumber, setDialpadNumber] = useState("");
+  const [dialpadName, setDialpadName] = useState("");
+  const [dialpadBusiness, setDialpadBusiness] = useState("");
+
+  // Custom criteria state
+  const [filterTags, setFilterTags] = useState("");
+  const [filterIndustry, setFilterIndustry] = useState("");
+  const [filterAssignedTo, setFilterAssignedTo] = useState("");
+  const [filterRevenueNotEmpty, setFilterRevenueNotEmpty] = useState(false);
+  const [filterHasApproval, setFilterHasApproval] = useState(false);
+  const [filterPreviouslyFunded, setFilterPreviouslyFunded] = useState("");
+  const [filterPipeline, setFilterPipeline] = useState("");
+  const [filterLimit, setFilterLimit] = useState(200);
 
   const activeGroup = STAGE_GROUPS.find((g) => g.label === selectedCategory);
 
@@ -137,6 +170,7 @@ export default function LeadLoader({
       if (!res.ok) throw new Error(data.error);
 
       setLeads(data.leads);
+      setListLabel(activeGroup?.stages.find((s) => s.key === selectedStage)?.label || "");
       setLoaded(true);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to load leads";
@@ -144,6 +178,71 @@ export default function LeadLoader({
     } finally {
       setLoading(false);
     }
+  }
+
+  async function loadCustomList() {
+    setLoading(true);
+    setError("");
+
+    const filters: Record<string, unknown> = { limit: filterLimit };
+
+    if (filterTags.trim()) {
+      filters.tags = filterTags.split(",").map((t) => t.trim()).filter(Boolean);
+    }
+    if (filterIndustry.trim()) filters.industry = filterIndustry.trim();
+    if (filterAssignedTo.trim()) filters.assignedTo = filterAssignedTo.trim();
+    if (filterRevenueNotEmpty) filters.monthlyRevenueMin = "notempty";
+    if (filterHasApproval) filters.hasApproval = true;
+    if (filterPreviouslyFunded) filters.previouslyFunded = filterPreviouslyFunded;
+    if (filterPipeline.trim()) filters.pipeline = filterPipeline.trim();
+
+    try {
+      const res = await apiFetch("/api/leads/query", {
+        method: "POST",
+        body: JSON.stringify(filters),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      setLeads(data.leads);
+      setListLabel("Custom List");
+      setLoaded(true);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to load leads";
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function handleDialpadDial() {
+    let digits = dialpadNumber.replace(/\D/g, "");
+    if (digits.length === 10) digits = "1" + digits;
+    if (!digits.startsWith("+")) digits = "+" + digits;
+    if (digits.length < 11) {
+      setError("Enter a valid phone number");
+      return;
+    }
+
+    const lead: Lead = {
+      id: `dialpad-${Date.now()}`,
+      name: dialpadName.trim() || "Manual Dial",
+      businessName: dialpadBusiness.trim(),
+      phone: digits,
+      email: "",
+      pipelineId: "dialpad",
+      pipelineStageId: "dialpad",
+      stageName: "Manual Dial",
+    };
+
+    onLeadsLoaded([lead]);
+  }
+
+  function formatDialpadDisplay(value: string): string {
+    const digits = value.replace(/\D/g, "");
+    if (digits.length <= 3) return digits;
+    if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6, 10)}`;
   }
 
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -166,6 +265,7 @@ export default function LeadLoader({
 
       setLeads(data.leads);
       setSkippedCount(data.skippedCount || 0);
+      setListLabel("Uploaded List");
       setLoaded(true);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to parse file";
@@ -183,9 +283,11 @@ export default function LeadLoader({
     setSkippedCount(0);
     setSelectedStage("");
     setSelectedCategory("");
+    setListLabel("");
   }
 
-  const stageName = activeGroup?.stages.find((s) => s.key === selectedStage)?.label || "";
+  const hasCustomFilter = filterTags.trim() || filterIndustry.trim() || filterAssignedTo.trim() ||
+    filterRevenueNotEmpty || filterHasApproval || filterPreviouslyFunded || filterPipeline.trim();
 
   return (
     <div className="flex items-center justify-center min-h-screen">
@@ -200,35 +302,27 @@ export default function LeadLoader({
 
         {/* Mode Tabs */}
         <div className="flex rounded-lg bg-gray-900 p-1 mb-6">
-          <button
-            onClick={() => { setMode("ghl"); resetState(); }}
-            className={`flex-1 py-2.5 text-sm font-medium rounded-md transition-colors ${
-              mode === "ghl"
-                ? "bg-blue-600 text-white shadow-sm"
-                : "text-gray-400 hover:text-gray-300"
-            }`}
-          >
-            GHL Pipeline
-          </button>
-          <button
-            onClick={() => { setMode("upload"); resetState(); }}
-            className={`flex-1 py-2.5 text-sm font-medium rounded-md transition-colors ${
-              mode === "upload"
-                ? "bg-blue-600 text-white shadow-sm"
-                : "text-gray-400 hover:text-gray-300"
-            }`}
-          >
-            Upload List
-          </button>
+          {(["pipeline", "custom", "dialpad", "upload"] as LoadMode[]).map((m) => (
+            <button
+              key={m}
+              onClick={() => { setMode(m); resetState(); }}
+              className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
+                mode === m
+                  ? "bg-blue-600 text-white shadow-sm"
+                  : "text-gray-400 hover:text-gray-300"
+              }`}
+            >
+              {m === "pipeline" ? "Pipeline" : m === "custom" ? "Custom" : m === "dialpad" ? "Dialpad" : "Upload"}
+            </button>
+          ))}
         </div>
 
-        {/* GHL Two-Step Dropdowns */}
-        {mode === "ghl" && !loaded && (
+        {/* Pipeline Two-Step Dropdowns */}
+        {mode === "pipeline" && !loaded && (
           <div className="space-y-4">
-            {/* Step 1: Category */}
             <div>
               <label className="block text-sm font-medium text-gray-400 mb-2">
-                1. Choose a category
+                1. Choose a pipeline
               </label>
               <select
                 value={selectedCategory}
@@ -238,7 +332,7 @@ export default function LeadLoader({
                 }}
                 className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none cursor-pointer"
               >
-                <option value="">Select a category...</option>
+                <option value="">Select a pipeline...</option>
                 {STAGE_GROUPS.map((group) => (
                   <option key={group.label} value={group.label}>
                     {group.label}
@@ -247,7 +341,6 @@ export default function LeadLoader({
               </select>
             </div>
 
-            {/* Step 2: Stage */}
             {selectedCategory && activeGroup && (
               <div>
                 <label className="block text-sm font-medium text-gray-400 mb-2">
@@ -268,7 +361,6 @@ export default function LeadLoader({
               </div>
             )}
 
-            {/* Load Button */}
             {selectedStage && (
               <button
                 onClick={loadLeads}
@@ -278,13 +370,239 @@ export default function LeadLoader({
                 {loading ? (
                   <>
                     <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                    Loading from GHL...
+                    Loading leads...
                   </>
                 ) : (
-                  `Load ${stageName} Leads`
+                  "Load Leads"
                 )}
               </button>
             )}
+          </div>
+        )}
+
+        {/* Custom List Builder */}
+        {mode === "custom" && !loaded && (
+          <div className="space-y-4">
+            <p className="text-gray-500 text-sm">
+              Set criteria to build a targeted dial list from your contact database.
+            </p>
+
+            {/* Tags */}
+            <div>
+              <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1.5">
+                Tags <span className="text-gray-600">(comma-separated, matches any)</span>
+              </label>
+              <input
+                type="text"
+                value={filterTags}
+                onChange={(e) => setFilterTags(e.target.value)}
+                placeholder="e.g. sba interest, ucc leads, top tier prospects"
+                className="w-full px-4 py-2.5 bg-gray-900 border border-gray-800 rounded-lg text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              />
+            </div>
+
+            {/* Industry + Assigned To */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1.5">
+                  Industry
+                </label>
+                <input
+                  type="text"
+                  value={filterIndustry}
+                  onChange={(e) => setFilterIndustry(e.target.value)}
+                  placeholder="e.g. trucking"
+                  className="w-full px-4 py-2.5 bg-gray-900 border border-gray-800 rounded-lg text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1.5">
+                  Assigned To
+                </label>
+                <input
+                  type="text"
+                  value={filterAssignedTo}
+                  onChange={(e) => setFilterAssignedTo(e.target.value)}
+                  placeholder="e.g. Dillon LeBlanc"
+                  className="w-full px-4 py-2.5 bg-gray-900 border border-gray-800 rounded-lg text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                />
+              </div>
+            </div>
+
+            {/* Pipeline filter */}
+            <div>
+              <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1.5">
+                Pipeline
+              </label>
+              <input
+                type="text"
+                value={filterPipeline}
+                onChange={(e) => setFilterPipeline(e.target.value)}
+                placeholder="e.g. App Sent, Underwriting, Hold"
+                className="w-full px-4 py-2.5 bg-gray-900 border border-gray-800 rounded-lg text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              />
+            </div>
+
+            {/* Toggle filters */}
+            <div className="flex flex-wrap gap-3">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={filterRevenueNotEmpty}
+                  onChange={(e) => setFilterRevenueNotEmpty(e.target.checked)}
+                  className="accent-blue-600"
+                />
+                <span className="text-sm text-gray-300">Has monthly revenue</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={filterHasApproval}
+                  onChange={(e) => setFilterHasApproval(e.target.checked)}
+                  className="accent-blue-600"
+                />
+                <span className="text-sm text-gray-300">Has approval letter</span>
+              </label>
+            </div>
+
+            {/* Previously funded */}
+            <div>
+              <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1.5">
+                Previously Funded
+              </label>
+              <select
+                value={filterPreviouslyFunded}
+                onChange={(e) => setFilterPreviouslyFunded(e.target.value)}
+                className="w-full px-4 py-2.5 bg-gray-900 border border-gray-800 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm appearance-none cursor-pointer"
+              >
+                <option value="">Any</option>
+                <option value="Yes">Yes</option>
+                <option value="No">No</option>
+              </select>
+            </div>
+
+            {/* Limit */}
+            <div>
+              <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1.5">
+                Max leads: {filterLimit}
+              </label>
+              <input
+                type="range"
+                min={25}
+                max={500}
+                step={25}
+                value={filterLimit}
+                onChange={(e) => setFilterLimit(parseInt(e.target.value))}
+                className="w-full accent-blue-600"
+              />
+            </div>
+
+            <button
+              onClick={loadCustomList}
+              disabled={loading || !hasCustomFilter}
+              className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:text-gray-500 text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
+            >
+              {loading ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                  Querying database...
+                </>
+              ) : (
+                "Build List"
+              )}
+            </button>
+          </div>
+        )}
+
+        {/* Dialpad */}
+        {mode === "dialpad" && (
+          <div className="space-y-5">
+            <p className="text-gray-500 text-sm text-center">
+              Dial any number directly
+            </p>
+
+            {/* Phone number display */}
+            <div className="text-center">
+              <div className="bg-gray-900 border border-gray-800 rounded-xl px-6 py-4 mb-4">
+                <p className="text-3xl font-mono text-white tracking-wider min-h-[2.5rem]">
+                  {dialpadNumber ? formatDialpadDisplay(dialpadNumber) : (
+                    <span className="text-gray-700">Enter a number</span>
+                  )}
+                </p>
+              </div>
+
+              {/* Number pad */}
+              <div className="grid grid-cols-3 gap-2 max-w-xs mx-auto mb-4">
+                {["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"].map((key) => (
+                  <button
+                    key={key}
+                    onClick={() => setDialpadNumber((prev) => prev + key)}
+                    className="py-3.5 bg-gray-800 hover:bg-gray-700 text-white text-xl font-medium rounded-lg transition-colors"
+                  >
+                    {key}
+                  </button>
+                ))}
+              </div>
+
+              {/* Backspace */}
+              <button
+                onClick={() => setDialpadNumber((prev) => prev.slice(0, -1))}
+                className="text-gray-500 hover:text-gray-300 text-sm mb-4 transition-colors"
+              >
+                Delete
+              </button>
+            </div>
+
+            {/* Optional name/business */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1.5">
+                  Name <span className="text-gray-700">(optional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={dialpadName}
+                  onChange={(e) => setDialpadName(e.target.value)}
+                  placeholder="Contact name"
+                  className="w-full px-3 py-2 bg-gray-900 border border-gray-800 rounded-lg text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1.5">
+                  Business <span className="text-gray-700">(optional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={dialpadBusiness}
+                  onChange={(e) => setDialpadBusiness(e.target.value)}
+                  placeholder="Business name"
+                  className="w-full px-3 py-2 bg-gray-900 border border-gray-800 rounded-lg text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                />
+              </div>
+            </div>
+
+            {/* Or paste a number */}
+            <div>
+              <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1.5">
+                Or paste a number
+              </label>
+              <input
+                type="tel"
+                value={dialpadNumber}
+                onChange={(e) => setDialpadNumber(e.target.value)}
+                placeholder="(555) 123-4567"
+                className="w-full px-4 py-2.5 bg-gray-900 border border-gray-800 rounded-lg text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              />
+            </div>
+
+            {/* Dial button */}
+            <button
+              onClick={handleDialpadDial}
+              disabled={dialpadNumber.replace(/\D/g, "").length < 10}
+              className="w-full py-4 bg-green-600 hover:bg-green-700 disabled:bg-gray-700 disabled:text-gray-500 text-white text-lg font-bold rounded-xl transition-colors"
+            >
+              Dial
+            </button>
           </div>
         )}
 
@@ -340,7 +658,6 @@ Jane Doe,Quick Mart,(555) 987-6543,jane@quick.com`}
         {/* Lead Preview */}
         {loaded && (
           <div className="mt-2">
-            {/* Summary bar */}
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="text-lg font-semibold">
@@ -351,8 +668,8 @@ Jane Doe,Quick Mart,(555) 987-6543,jane@quick.com`}
                     {skippedCount} skipped (missing/invalid phone)
                   </p>
                 )}
-                {stageName && (
-                  <p className="text-gray-500 text-xs mt-0.5">{stageName}</p>
+                {listLabel && (
+                  <p className="text-gray-500 text-xs mt-0.5">{listLabel}</p>
                 )}
               </div>
               <div className="flex gap-2">
@@ -375,7 +692,7 @@ Jane Doe,Quick Mart,(555) 987-6543,jane@quick.com`}
 
             {leads.length === 0 ? (
               <div className="text-center py-12 text-gray-500">
-                <p>No leads with phone numbers found in this stage.</p>
+                <p>No leads matched your criteria.</p>
               </div>
             ) : (
               <div className="max-h-72 overflow-y-auto rounded-lg border border-gray-800 divide-y divide-gray-800/50">

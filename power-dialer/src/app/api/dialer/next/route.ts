@@ -6,7 +6,7 @@
 // the status callback (/api/twilio/status).
 
 import { NextRequest, NextResponse } from "next/server";
-import { dialLeadIntoConference, getActiveCarrier } from "@/lib/carrier";
+import { dialLeadIntoConference, callWebRTCClientIntoConference, getActiveCarrier } from "@/lib/carrier";
 import { sessions, type CallRecord } from "@/lib/types";
 import { requireAuth } from "@/lib/auth";
 
@@ -23,6 +23,21 @@ export async function POST(req: NextRequest) {
 
   if (session.status === "ended") {
     return NextResponse.json({ error: "Session has ended" }, { status: 400 });
+  }
+
+  // WebRTC mode: ensure the browser client is in the conference before dialing leads
+  if (session.connectionMode === "webrtc" && !session.conferenceCallSid && session.webrtcResource) {
+    try {
+      const repCallSid = await callWebRTCClientIntoConference(
+        session.webrtcResource,
+        session.conferenceName,
+        session.id
+      );
+      session.conferenceCallSid = repCallSid;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to connect browser to conference";
+      return NextResponse.json({ error: msg }, { status: 500 });
+    }
   }
 
   // ── Single-line mode ──────────────────────────────────────

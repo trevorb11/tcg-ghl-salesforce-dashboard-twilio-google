@@ -168,6 +168,68 @@ export async function endConference(conferenceName: string): Promise<void> {
   }
 }
 
+// ── WebRTC: Generate JWT for browser calling ─────────────
+// The browser connects to SignalWire via WebRTC using this JWT.
+// The `resource` param becomes the SIP identity the server can call.
+export async function generateWebRTCToken(repId: string): Promise<{
+  token: string;
+  resource: string;
+  project: string;
+}> {
+  const config = getCarrierConfig();
+  const space = process.env.SIGNALWIRE_SPACE || `${config.space}.signalwire.com`;
+  const spaceHost = space.includes(".signalwire.com") ? space : `${space}.signalwire.com`;
+  const resource = `dialer-${repId}-${Date.now()}`;
+
+  const response = await fetch(`https://${spaceHost}/api/relay/rest/jwt`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: "Basic " + Buffer.from(`${config.accountSid}:${config.authToken}`).toString("base64"),
+    },
+    body: JSON.stringify({
+      resource,
+      expires_in: 7200, // 2 hours
+    }),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`SignalWire JWT error ${response.status}: ${text}`);
+  }
+
+  const data = await response.json();
+  return {
+    token: data.jwt_token,
+    resource,
+    project: config.accountSid,
+  };
+}
+
+// Call the WebRTC browser client into the conference (instead of calling a phone)
+export async function callWebRTCClientIntoConference(
+  resource: string,
+  conferenceName: string,
+  sessionId: string
+): Promise<string> {
+  const config = getCarrierConfig();
+  const client = getClient();
+  const space = process.env.SIGNALWIRE_SPACE || `${config.space}.signalwire.com`;
+  const spaceHost = space.includes(".signalwire.com") ? space : `${space}.signalwire.com`;
+  const sessionParam = `&sessionId=${encodeURIComponent(sessionId)}`;
+
+  const call = await client.calls.create({
+    to: `sip:${resource}@${spaceHost}`,
+    from: config.phoneNumber,
+    url: `${appUrl}/api/twilio/voice?action=join_conference&conference=${encodeURIComponent(conferenceName)}&role=rep${sessionParam}`,
+    statusCallback: `${appUrl}/api/twilio/status`,
+    statusCallbackEvent: ["initiated", "ringing", "answered", "completed"],
+    statusCallbackMethod: "POST",
+  });
+
+  return call.sid;
+}
+
 // Get recording URL for a conference
 export async function getConferenceRecordings(conferenceSid: string) {
   const config = getCarrierConfig();

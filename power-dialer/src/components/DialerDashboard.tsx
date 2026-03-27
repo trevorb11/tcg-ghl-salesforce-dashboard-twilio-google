@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { apiFetch } from "@/lib/api-client";
+import { useSignalWireWebRTC } from "@/hooks/useSignalWireWebRTC";
 
 interface Rep {
   id: string;
@@ -122,6 +123,12 @@ export default function DialerDashboard({
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Connection mode + WebRTC
+  const [connectionMode, setConnectionMode] = useState<"phone" | "webrtc">(
+    rep.phone ? "phone" : "webrtc"
+  );
+  const webrtc = useSignalWireWebRTC();
+
   // AI state
   const [lastAnalysis, setLastAnalysis] = useState<CallAnalysis | null>(null);
   const [analyzingCall, setAnalyzingCall] = useState(false);
@@ -224,16 +231,22 @@ export default function DialerDashboard({
         body: JSON.stringify({
           repId: rep.id,
           repName: rep.name,
-          repPhone: rep.phone,
+          repPhone: connectionMode === "phone" ? rep.phone : undefined,
           leads,
           dialMode,
           lines: dialMode === "multi" ? linesCount : 1,
+          connectionMode,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setSessionId(data.sessionId);
       setStatus("connecting_rep");
+
+      // WebRTC mode: connect the browser to SignalWire
+      if (connectionMode === "webrtc" && data.webrtc) {
+        webrtc.connect(data.webrtc);
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to start";
       setError(msg);
@@ -334,6 +347,7 @@ export default function DialerDashboard({
     } catch {
       // Best effort
     }
+    webrtc.disconnect();
     setStatus("ended");
   }
 
@@ -417,7 +431,44 @@ export default function DialerDashboard({
               <div className="text-center mb-8">
                 <h2 className="text-xl font-semibold mb-2">Ready to Dial</h2>
                 <p className="text-gray-400">
-                  We&apos;ll call you at {rep.phone}, then start dialing your leads.
+                  {connectionMode === "webrtc"
+                    ? "Calls will connect directly through your browser."
+                    : `We'll call you at ${rep.phone}, then start dialing your leads.`}
+                </p>
+              </div>
+
+              {/* Connection Mode Toggle */}
+              <div className="max-w-sm mx-auto mb-6">
+                <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-2 text-center">
+                  Call Via
+                </label>
+                <div className="flex rounded-lg bg-gray-800 p-1">
+                  <button
+                    onClick={() => setConnectionMode("webrtc")}
+                    className={`flex-1 py-2.5 text-sm font-medium rounded-md transition-colors ${
+                      connectionMode === "webrtc"
+                        ? "bg-green-600 text-white shadow-sm"
+                        : "text-gray-400 hover:text-gray-300"
+                    }`}
+                  >
+                    Browser
+                  </button>
+                  <button
+                    onClick={() => setConnectionMode("phone")}
+                    disabled={!rep.phone}
+                    className={`flex-1 py-2.5 text-sm font-medium rounded-md transition-colors ${
+                      connectionMode === "phone"
+                        ? "bg-green-600 text-white shadow-sm"
+                        : "text-gray-400 hover:text-gray-300 disabled:text-gray-600 disabled:cursor-not-allowed"
+                    }`}
+                  >
+                    Phone
+                  </button>
+                </div>
+                <p className="text-[11px] text-gray-600 text-center mt-1.5">
+                  {connectionMode === "webrtc"
+                    ? "Uses your browser microphone — no phone needed"
+                    : `Calls ${rep.phone} first, then dials leads`}
                 </p>
               </div>
 
@@ -493,11 +544,30 @@ export default function DialerDashboard({
           {/* Connecting Rep */}
           {status === "connecting_rep" && !currentLead && callLog.length === 0 && (
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-12 text-center">
-              <div className="w-12 h-12 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-              <h2 className="text-xl font-semibold mb-2">Calling your phone...</h2>
-              <p className="text-gray-400">
-                Answer the call to join the dialer. Then press &quot;Dial Next&quot; to start.
-              </p>
+              {connectionMode === "webrtc" ? (
+                <>
+                  <div className="w-12 h-12 border-4 border-green-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+                  <h2 className="text-xl font-semibold mb-2">
+                    {webrtc.isConnected ? "Browser connected!" : "Connecting browser..."}
+                  </h2>
+                  <p className="text-gray-400">
+                    {webrtc.isConnected
+                      ? "You're live. Press \"Dial Next\" to start calling."
+                      : "Requesting microphone access..."}
+                  </p>
+                  {webrtc.error && (
+                    <p className="text-red-400 text-sm mt-3">{webrtc.error}</p>
+                  )}
+                </>
+              ) : (
+                <>
+                  <div className="w-12 h-12 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+                  <h2 className="text-xl font-semibold mb-2">Calling your phone...</h2>
+                  <p className="text-gray-400">
+                    Answer the call to join the dialer. Then press &quot;Dial Next&quot; to start.
+                  </p>
+                </>
+              )}
             </div>
           )}
 
@@ -628,6 +698,19 @@ export default function DialerDashboard({
                   <p className="text-green-400 font-medium text-lg">
                     Connected{dialMode === "multi" && currentLead ? ` with ${currentLead.name}` : ""} — You&apos;re live!
                   </p>
+                  {/* Mute button (WebRTC mode) */}
+                  {connectionMode === "webrtc" && (
+                    <button
+                      onClick={webrtc.toggleMute}
+                      className={`mt-3 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                        webrtc.isMuted
+                          ? "bg-red-600 hover:bg-red-700 text-white"
+                          : "bg-gray-700 hover:bg-gray-600 text-gray-300"
+                      }`}
+                    >
+                      {webrtc.isMuted ? "Unmute" : "Mute"}
+                    </button>
+                  )}
                 </div>
               )}
             </div>
