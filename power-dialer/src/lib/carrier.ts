@@ -13,6 +13,7 @@
 // and redeploy. Everything else stays the same.
 
 import twilio from "twilio";
+import { getLocalPresenceNumber } from "./local-presence";
 
 // ── Carrier detection ──────────────────────────────────────
 export type CarrierType = "twilio" | "signalwire";
@@ -123,18 +124,19 @@ export async function callRepIntoConference(
 }
 
 // Step 2: Dial a lead into the same conference
+// Uses local presence matching to pick the best caller ID
 export async function dialLeadIntoConference(
   leadPhone: string,
   conferenceName: string,
   leadId: string,
   sessionId: string
 ): Promise<string> {
-  const config = getCarrierConfig();
   const client = getClient();
+  const fromNumber = getLocalPresenceNumber(leadPhone);
 
   const call = await client.calls.create({
     to: leadPhone,
-    from: config.phoneNumber,
+    from: fromNumber,
     url: `${appUrl}/api/twilio/voice?action=join_conference&conference=${encodeURIComponent(conferenceName)}&role=lead&sessionId=${encodeURIComponent(sessionId)}`,
     statusCallback: `${appUrl}/api/twilio/status?leadId=${leadId}&sessionId=${sessionId}`,
     statusCallbackEvent: ["initiated", "ringing", "answered", "completed"],
