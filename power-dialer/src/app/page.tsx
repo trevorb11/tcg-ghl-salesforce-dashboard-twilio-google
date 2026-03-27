@@ -64,13 +64,19 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen">
+    <main className="min-h-screen bg-gray-950 text-white">
       {screen === "login" && <LoginScreen onLogin={handleLogin} />}
+
       {screen === "load_leads" && rep && (
         <LeadLoader rep={rep} onLeadsLoaded={handleLeadsLoaded} />
       )}
+
       {screen === "dialer" && rep && (
-        <DialerDashboard rep={rep} leads={leads} onEnd={handleSessionEnd} />
+        <DialerDashboard
+          rep={rep}
+          leads={leads}
+          onEnd={handleSessionEnd}
+        />
       )}
     </main>
   );

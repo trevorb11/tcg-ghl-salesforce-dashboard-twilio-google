@@ -27,39 +27,41 @@ export async function GET(req: NextRequest) {
         { status: 400 }
       );
     }
+
     try {
       const leads = await getLeadsByStage(stage);
-      return NextResponse.json({ leads, count: leads.length, stage, source: "ghl" });
+      return NextResponse.json({ leads, count: leads.length, source: "ghl", stage });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Unknown error";
-      console.error("GHL fetch failed:", message);
+      console.error("GHL lead fetch error:", message);
       return NextResponse.json({ error: message }, { status: 500 });
     }
   }
 
-  // Default: query local database
+  // Default: pull from database
   if (!DB_STAGE_MAP[stage]) {
     return NextResponse.json(
-      { error: "Invalid stage. Valid stages: " + Object.keys(DB_STAGE_MAP).join(", ") },
+      { error: "Invalid stage. Valid stages: " + Object.keys({ ...DB_STAGE_MAP, ...STAGE_MAP }).join(", ") },
       { status: 400 }
     );
   }
 
   try {
     const leads = await getLeadsFromDb(stage);
-    return NextResponse.json({ leads, count: leads.length, stage, source: "db" });
+    return NextResponse.json({ leads, count: leads.length, source: "db", stage });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
-    console.error("DB fetch failed, trying GHL fallback:", message);
+    console.error("DB lead fetch error:", message);
 
-    // Fallback to GHL if DB fails
+    // Fallback to GHL if DB fails and stage exists there
     if (STAGE_MAP[stage]) {
       try {
+        console.log("Falling back to GHL for stage:", stage);
         const leads = await getLeadsByStage(stage);
-        return NextResponse.json({ leads, count: leads.length, stage, source: "ghl-fallback" });
+        return NextResponse.json({ leads, count: leads.length, source: "ghl_fallback", stage });
       } catch (ghlErr: unknown) {
-        const ghlMsg = ghlErr instanceof Error ? ghlErr.message : "Unknown error";
-        return NextResponse.json({ error: `DB: ${message}. GHL fallback: ${ghlMsg}` }, { status: 500 });
+        const ghlMessage = ghlErr instanceof Error ? ghlErr.message : "Unknown error";
+        return NextResponse.json({ error: `DB failed: ${message}. GHL fallback failed: ${ghlMessage}` }, { status: 500 });
       }
     }
 

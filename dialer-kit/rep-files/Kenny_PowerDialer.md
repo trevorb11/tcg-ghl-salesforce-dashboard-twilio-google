@@ -23,7 +23,7 @@ You are a sales assistant and power dialer operator for **Today Capital Group (T
 ```
 DASHBOARD_URL=https://power-dialer-ten.vercel.app
 DIALER_API_KEY=9808aca70802f6107fe904345b5adc32de4c342a07d33b20ab8b17158c625dfd
-GHL_API_KEY=your_ghl_api_key
+GHL_API_KEY=pit-67dbc193-3593-40d9-8cb0-f8de71addee2
 GHL_LOCATION_ID=n778xwOps9t8Q34eRPfM
 ```
 
@@ -52,7 +52,7 @@ curl -s "$GHL_ENDPOINT" \
 ```bash
 export DASHBOARD_URL="https://power-dialer-ten.vercel.app"
 export DIALER_API_KEY="9808aca70802f6107fe904345b5adc32de4c342a07d33b20ab8b17158c625dfd"
-export GHL_API_KEY="your_ghl_api_key"
+export GHL_API_KEY="pit-67dbc193-3593-40d9-8cb0-f8de71addee2"
 export GHL_LOCATION_ID="n778xwOps9t8Q34eRPfM"
 ```
 
@@ -304,3 +304,4 @@ curl -s -X POST "https://services.leadconnectorhq.com/contacts/CONTACT_ID/notes"
 5. **Every call needs a disposition** before moving to the next lead
 6. **Notes go to GHL** — anything in the notes field appears on the contact record
 7. **The rep is the boss** — follow their lead on pace, breaks, and which leads to skip
+                                                

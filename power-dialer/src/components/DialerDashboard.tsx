@@ -126,9 +126,9 @@ export default function DialerDashboard({
   const [loadingSummary, setLoadingSummary] = useState(false);
   const [expandedCallId, setExpandedCallId] = useState<string | null>(null);
 
-  // Multi-line state
+  // Dial mode config (set before starting session)
   const [dialMode, setDialMode] = useState<"single" | "multi">("single");
-  const [linesCount, setLinesCount] = useState(1);
+  const [linesCount, setLinesCount] = useState(3);
   const [batchInfo, setBatchInfo] = useState<{ linesDialed: number; connected: boolean; settled: boolean } | null>(null);
   const [dialingLeads, setDialingLeads] = useState<{ name: string; businessName: string; phone: string; callSid?: string }[]>([]);
 
@@ -223,6 +223,8 @@ export default function DialerDashboard({
           repName: rep.name,
           repPhone: rep.phone,
           leads,
+          dialMode,
+          lines: dialMode === "multi" ? linesCount : 1,
         }),
       });
       const data = await res.json();
@@ -407,17 +409,80 @@ export default function DialerDashboard({
         <div className="lg:col-span-2 space-y-4">
           {/* Start Button */}
           {status === "idle" && (
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-12 text-center">
-              <h2 className="text-xl font-semibold mb-2">Ready to Dial</h2>
-              <p className="text-gray-400 mb-6">
-                We&apos;ll call you at {rep.phone}, then start dialing your leads.
-              </p>
-              <button
-                onClick={startSession}
-                className="px-8 py-4 bg-green-600 hover:bg-green-700 text-white text-lg font-bold rounded-xl transition-colors"
-              >
-                Start Dialing Session
-              </button>
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-8 sm:p-12">
+              <div className="text-center mb-8">
+                <h2 className="text-xl font-semibold mb-2">Ready to Dial</h2>
+                <p className="text-gray-400">
+                  We&apos;ll call you at {rep.phone}, then start dialing your leads.
+                </p>
+              </div>
+
+              {/* Dial Mode Toggle */}
+              <div className="max-w-sm mx-auto mb-6">
+                <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-2 text-center">
+                  Dial Mode
+                </label>
+                <div className="flex rounded-lg bg-gray-800 p-1">
+                  <button
+                    onClick={() => setDialMode("single")}
+                    className={`flex-1 py-2.5 text-sm font-medium rounded-md transition-colors ${
+                      dialMode === "single"
+                        ? "bg-blue-600 text-white shadow-sm"
+                        : "text-gray-400 hover:text-gray-300"
+                    }`}
+                  >
+                    Single Line
+                  </button>
+                  <button
+                    onClick={() => setDialMode("multi")}
+                    className={`flex-1 py-2.5 text-sm font-medium rounded-md transition-colors ${
+                      dialMode === "multi"
+                        ? "bg-blue-600 text-white shadow-sm"
+                        : "text-gray-400 hover:text-gray-300"
+                    }`}
+                  >
+                    Multi-Line
+                  </button>
+                </div>
+                <p className="text-[11px] text-gray-600 text-center mt-1.5">
+                  {dialMode === "single"
+                    ? "Calls one lead at a time"
+                    : "Dials multiple leads at once — first to answer connects"}
+                </p>
+              </div>
+
+              {/* Line Count (multi-line only) */}
+              {dialMode === "multi" && (
+                <div className="max-w-sm mx-auto mb-8">
+                  <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-2 text-center">
+                    Lines ({linesCount})
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <span className="text-gray-500 text-xs">2</span>
+                    <input
+                      type="range"
+                      min={2}
+                      max={5}
+                      value={linesCount}
+                      onChange={(e) => setLinesCount(parseInt(e.target.value))}
+                      className="flex-1 accent-blue-600"
+                    />
+                    <span className="text-gray-500 text-xs">5</span>
+                  </div>
+                  <p className="text-[11px] text-gray-600 text-center mt-1">
+                    {linesCount} leads will ring simultaneously per round
+                  </p>
+                </div>
+              )}
+
+              <div className="text-center">
+                <button
+                  onClick={startSession}
+                  className="px-8 py-4 bg-green-600 hover:bg-green-700 text-white text-lg font-bold rounded-xl transition-colors"
+                >
+                  Start {dialMode === "multi" ? `Multi-Line (${linesCount}x)` : "Dialing"} Session
+                </button>
+              </div>
             </div>
           )}
 
@@ -711,14 +776,12 @@ export default function DialerDashboard({
                   </h3>
                   <p className="text-xs text-gray-500 mb-4">{dailySummary.stats}</p>
 
-                  {/* Recap */}
                   <div className="mb-4">
                     <p className="text-gray-300 text-sm whitespace-pre-line leading-relaxed">
                       {dailySummary.recap}
                     </p>
                   </div>
 
-                  {/* Hot Leads */}
                   {dailySummary.hotLeads.length > 0 && (
                     <div className="mb-4">
                       <h4 className="text-sm font-medium text-green-400 mb-2">
@@ -735,7 +798,6 @@ export default function DialerDashboard({
                     </div>
                   )}
 
-                  {/* Follow-Up Plan */}
                   {dailySummary.followUpPlan.length > 0 && (
                     <div>
                       <h4 className="text-sm font-medium text-blue-400 mb-2">
@@ -744,9 +806,7 @@ export default function DialerDashboard({
                       <ul className="space-y-1.5">
                         {dailySummary.followUpPlan.map((item, i) => (
                           <li key={i} className="text-sm text-gray-300 flex gap-2">
-                            <span className="text-blue-500 mt-0.5 shrink-0">
-                              {i + 1}.
-                            </span>
+                            <span className="text-blue-500 mt-0.5 shrink-0">{i + 1}.</span>
                             {item}
                           </li>
                         ))}
@@ -845,62 +905,36 @@ export default function DialerDashboard({
   );
 }
 
+// ── Lead Context Card ──────────────────────────────────────
+// Shows enriched CRM data when a lead is on a call
 function LeadContextCard({ lead }: { lead: Lead }) {
-  const details: { label: string; value: string }[] = [];
+  const fields = [
+    { label: "Stage", value: lead.stageName },
+    { label: "Email", value: lead.email },
+    { label: "Monthly Revenue", value: lead._monthlyRevenue },
+    { label: "Industry", value: lead._industry },
+    { label: "Years in Business", value: lead._yearsInBusiness },
+    { label: "Amount Requested", value: lead._amountRequested },
+    { label: "Credit Score", value: lead._creditScore },
+    { label: "Previously Funded", value: lead._previouslyFunded },
+    { label: "Current Positions", value: lead._currentPositions },
+    { label: "Last Disposition", value: lead._lastDisposition },
+  ].filter((f) => f.value);
 
-  if (lead._monthlyRevenue) details.push({ label: "Monthly Revenue", value: lead._monthlyRevenue });
-  if (lead._amountRequested) details.push({ label: "Amount Requested", value: lead._amountRequested });
-  if (lead._industry) details.push({ label: "Industry", value: lead._industry });
-  if (lead._yearsInBusiness) details.push({ label: "Years in Business", value: lead._yearsInBusiness });
-  if (lead._creditScore) details.push({ label: "Credit Score", value: lead._creditScore });
-  if (lead._previouslyFunded) details.push({ label: "Previously Funded", value: lead._previouslyFunded });
-  if (lead._currentPositions) details.push({ label: "Current Positions", value: lead._currentPositions });
-  if (lead._lastDisposition) details.push({ label: "Last Disposition", value: lead._lastDisposition });
-  if (lead.lastContactedAt) details.push({ label: "Last Contacted", value: lead.lastContactedAt });
+  const hasNote = lead._lastNote;
+  const hasTags = lead.tags && lead.tags.length > 0;
 
-  const hasApproval = lead._approvalLetter && lead._approvalLetter.trim() !== "";
-  const hasNote = lead._lastNote && lead._lastNote.trim() !== "";
-
-  if (details.length === 0 && !hasApproval && !hasNote && (!lead.tags || lead.tags.length === 0)) {
-    return null;
-  }
+  if (fields.length === 0 && !hasNote && !hasTags) return null;
 
   return (
-    <div className="bg-gray-800/40 border border-gray-700/50 rounded-lg p-4 space-y-3">
-      {/* Quick stats grid */}
-      {details.length > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2">
-          {details.map((d) => (
-            <div key={d.label}>
-              <p className="text-[10px] text-gray-500 uppercase tracking-wider">{d.label}</p>
-              <p className="text-sm text-gray-300 truncate">{d.value}</p>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Approval letter alert */}
-      {hasApproval && (
-        <div className="flex items-center gap-2 px-3 py-2 bg-green-900/20 border border-green-800/40 rounded-md">
-          <span className="text-green-400 text-xs font-semibold uppercase">Approval on file</span>
-          <a
-            href={lead._approvalLetter}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-green-400 text-xs underline hover:text-green-300 ml-auto"
-          >
-            View &rarr;
-          </a>
-        </div>
-      )}
-
+    <div className="bg-gray-800/40 border border-gray-700/50 rounded-lg p-4">
       {/* Tags */}
-      {lead.tags && lead.tags.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {lead.tags.map((tag, i) => (
+      {hasTags && (
+        <div className="flex flex-wrap gap-1.5 mb-3">
+          {lead.tags!.map((tag, i) => (
             <span
               key={i}
-              className="px-2 py-0.5 bg-gray-700/50 text-gray-400 text-[10px] rounded-full"
+              className="px-2 py-0.5 bg-gray-700/60 text-gray-300 text-[11px] rounded-full"
             >
               {tag}
             </span>
@@ -908,10 +942,28 @@ function LeadContextCard({ lead }: { lead: Lead }) {
         </div>
       )}
 
+      {/* CRM fields grid */}
+      {fields.length > 0 && (
+        <div className="grid grid-cols-2 gap-x-6 gap-y-2 mb-3">
+          {fields.map((f, i) => (
+            <div key={i} className="flex items-baseline justify-between gap-2">
+              <span className="text-[11px] text-gray-500 uppercase tracking-wider shrink-0">
+                {f.label}
+              </span>
+              <span className="text-sm text-gray-300 text-right truncate">
+                {f.value}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Last note */}
       {hasNote && (
-        <div>
-          <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-0.5">Last Note</p>
+        <div className="pt-2 border-t border-gray-700/50">
+          <p className="text-[11px] text-gray-500 uppercase tracking-wider mb-1">
+            Last Note
+          </p>
           <p className="text-xs text-gray-400 leading-relaxed line-clamp-3">
             {lead._lastNote}
           </p>
@@ -921,6 +973,7 @@ function LeadContextCard({ lead }: { lead: Lead }) {
   );
 }
 
+// ── Disposition Badge ──────────────────────────────────────
 function DispositionBadge({ d }: { d?: string }) {
   if (!d) return <span className="text-xs text-gray-600">pending</span>;
   const colors: Record<string, string> = {
