@@ -3,8 +3,12 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getLeadsByStage, STAGE_MAP } from "@/lib/ghl";
+import { requireAuth } from "@/lib/auth";
 
 export async function GET(req: NextRequest) {
+  const authError = requireAuth(req);
+  if (authError) return authError;
+
   const stage = req.nextUrl.searchParams.get("stage");
 
   if (!stage || !STAGE_MAP[stage]) {

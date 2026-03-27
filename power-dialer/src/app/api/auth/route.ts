@@ -4,8 +4,12 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { REP_DIRECTORY } from "@/lib/types";
+import { requireAuth } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
+  const authError = requireAuth(req);
+  if (authError) return authError;
+
   const { email, phone } = await req.json();
 
   if (!email || !phone) {

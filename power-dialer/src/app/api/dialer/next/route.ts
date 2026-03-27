@@ -4,8 +4,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { dialLeadIntoConference } from "@/lib/twilio";
 import { sessions, type CallRecord } from "@/lib/types";
+import { requireAuth } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
+  const authError = requireAuth(req);
+  if (authError) return authError;
+
   const { sessionId } = await req.json();
 
   const session = sessions.get(sessionId);

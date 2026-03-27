@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sessions, type Disposition } from "@/lib/types";
 import { addContactNote } from "@/lib/ghl";
+import { requireAuth } from "@/lib/auth";
 
 const VALID_DISPOSITIONS: Disposition[] = [
   "interested",
@@ -15,6 +16,9 @@ const VALID_DISPOSITIONS: Disposition[] = [
 ];
 
 export async function POST(req: NextRequest) {
+  const authError = requireAuth(req);
+  if (authError) return authError;
+
   const { sessionId, disposition, notes } = await req.json() as {
     sessionId: string;
     disposition: Disposition;

@@ -7,8 +7,12 @@ import { sessions } from "@/lib/types";
 import { analyzeCallTranscript } from "@/lib/claude";
 import { addContactNote } from "@/lib/ghl";
 import { twilioClient } from "@/lib/twilio";
+import { requireAuth } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
+  const authError = requireAuth(req);
+  if (authError) return authError;
+
   const { sessionId, callId } = await req.json();
 
   const session = sessions.get(sessionId);
@@ -102,6 +106,9 @@ export async function POST(req: NextRequest) {
 
 // GET — Check if analysis is ready for a call (used by polling)
 export async function GET(req: NextRequest) {
+  const authError = requireAuth(req);
+  if (authError) return authError;
+
   const sessionId = req.nextUrl.searchParams.get("sessionId");
   const callId = req.nextUrl.searchParams.get("callId");
 

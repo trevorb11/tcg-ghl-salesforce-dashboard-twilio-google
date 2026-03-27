@@ -4,8 +4,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sessions } from "@/lib/types";
 import { generateDailySummary } from "@/lib/claude";
+import { requireAuth } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
+  const authError = requireAuth(req);
+  if (authError) return authError;
+
   const { sessionId } = await req.json();
 
   const session = sessions.get(sessionId);

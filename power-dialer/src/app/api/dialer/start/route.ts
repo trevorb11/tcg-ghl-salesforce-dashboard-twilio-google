@@ -6,8 +6,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { callRepIntoConference } from "@/lib/twilio";
 import { sessions, type DialerSession, type Lead } from "@/lib/types";
+import { requireAuth } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
+  const authError = requireAuth(req);
+  if (authError) return authError;
+
   const { repId, repName, repPhone, leads } = await req.json() as {
     repId: string;
     repName: string;
