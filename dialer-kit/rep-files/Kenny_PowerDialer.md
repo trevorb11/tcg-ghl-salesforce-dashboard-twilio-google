@@ -594,6 +594,102 @@ curl -s -X POST "https://services.leadconnectorhq.com/contacts/CONTACT_ID/notes"
 - **Before dialing, give context** — name, business, any prior notes
 - **End of day → real briefing** — who to focus on tomorrow and why, not just numbers
 
+
+
+---
+
+## CapitalLoanConnect Dashboard API (Browser-Compatible)
+
+When running in a browser (claude.ai) without shell access, use the CapitalLoanConnect REST API to query the database. This works from any Claude instance — no database drivers needed.
+
+**API Base URL:** `https://app.todaycapitalgroup.com`
+**Auth Header:** `X-Claude-API-Key: claude_99efff1a004422bdb67acf3f345f8a20e4fe8c29a734a82c132b2500d9fbd4bf`
+
+### Query the Lead Database
+
+```
+POST https://app.todaycapitalgroup.com/api/admin/claude/sql
+Header: X-Claude-API-Key: claude_99efff1a004422bdb67acf3f345f8a20e4fe8c29a734a82c132b2500d9fbd4bf
+Header: Content-Type: application/json
+Body: { "query": "SELECT * FROM dialer_contacts WHERE assigned_to = 'Rep Name' LIMIT 20" }
+```
+
+### Key Tables
+
+| Table | Purpose |
+|---|---|
+| `dialer_contacts` | All 56K+ leads with full CRM data (main dial list source) |
+| `loan_applications` | Intake + full application submissions |
+| `business_underwriting_decisions` | Underwriting outcomes (approved/declined/funded) |
+| `dialer_sessions` | Active and historical dialer sessions |
+
+### dialer_contacts Columns
+
+| Column | What it is |
+|---|---|
+| `ghl_contact_id` | GHL contact ID (use for CRM links) |
+| `first_name`, `last_name` | Contact name |
+| `phone`, `email` | Contact info |
+| `business_name` | Company name |
+| `assigned_to` | Rep name (e.g. "Dillon LeBlanc") |
+| `opp_stage_selection` | Pipeline stage |
+| `pipeline_selection` | Pipeline name |
+| `tags` | Comma-separated tags |
+| `monthly_revenue` | Monthly revenue |
+| `industry_dropdown` | Industry |
+| `amount_requested` | Funding amount requested |
+| `call_disposition` | Last call result |
+| `last_contacted` | Last contact date |
+| `last_note` | Last CRM note |
+| `approval_letter` | Approval letter URL |
+| `previously_funded` | Yes/No |
+| `current_positions_balances` | Existing positions |
+| `state`, `city` | Location |
+| `dnd` | Do Not Disturb flag |
+
+### Example Queries
+
+```sql
+-- Get a rep's leads
+SELECT first_name, last_name, business_name, phone, tags, monthly_revenue 
+FROM dialer_contacts WHERE assigned_to = 'Dillon LeBlanc' LIMIT 20
+
+-- Search by business name
+SELECT * FROM dialer_contacts WHERE business_name ILIKE '%trucking%'
+
+-- Find leads by tag
+SELECT * FROM dialer_contacts WHERE tags ILIKE '%sba interest%' AND phone != ''
+
+-- Count leads per stage
+SELECT opp_stage_selection, COUNT(*) FROM dialer_contacts GROUP BY opp_stage_selection ORDER BY count DESC
+
+-- Leads with monthly revenue in a specific industry
+SELECT first_name, last_name, business_name, phone, monthly_revenue 
+FROM dialer_contacts 
+WHERE industry_dropdown ILIKE '%construction%' 
+  AND monthly_revenue IS NOT NULL AND monthly_revenue != ''
+  AND phone IS NOT NULL AND phone != ''
+
+-- Check underwriting decisions for a business
+SELECT * FROM business_underwriting_decisions WHERE business_name ILIKE '%keyword%'
+
+-- Recent loan applications
+SELECT full_name, email, business_name, requested_amount, created_at 
+FROM loan_applications ORDER BY created_at DESC LIMIT 10
+```
+
+### Other Useful Endpoints
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| GET | `/api/admin/claude/ping` | Auth test |
+| GET | `/api/admin/claude/context` | Full system context + schema |
+| GET | `/api/admin/claude/table/:tableName?limit=50` | Read any table |
+| POST | `/api/admin/claude/sql` | Read-only SQL query |
+| POST | `/api/admin/claude/mutate` | Write SQL (INSERT/UPDATE/DELETE) |
+
+All endpoints require the `X-Claude-API-Key` header.
+
 ## Rules
 
 1. **Never call Do Not Contact leads** — refuse if asked
