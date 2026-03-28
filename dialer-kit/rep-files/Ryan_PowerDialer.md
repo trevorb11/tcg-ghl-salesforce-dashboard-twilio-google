@@ -306,6 +306,66 @@ curl -s -X POST "$DASHBOARD_URL/api/dialer/summary" \
 
 Present the briefing conversationally — highlight hot leads, give follow-up actions, note what went well. Don't just dump stats.
 
+
+### Step 9: Save Session Log (REQUIRED)
+
+**At the end of every session, save a recap to the database.** This lets you (and future Claude instances) review what happened in prior sessions â€” who was called, what worked, who to follow up with.
+
+Use the CapitalLoanConnect API to write the log:
+
+```
+POST https://app.todaycapitalgroup.com/api/admin/claude/mutate
+Header: X-Claude-API-Key: claude_99efff1a004422bdb67acf3f345f8a20e4fe8c29a734a82c132b2500d9fbd4bf
+Header: Content-Type: application/json
+Body: {
+  "sql": "INSERT INTO dialer_session_logs (session_id, rep_id, rep_name, started_at, ended_at, duration_minutes, total_leads, total_calls, connected, interested, callbacks, not_interested, no_answer, voicemail, wrong_number, disconnected, total_talk_time_seconds, dial_mode, connection_mode, lead_source, lead_filter, hot_leads, follow_up_plan, ai_recap, call_details) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)",
+  "params": [
+    "SESSION_ID",
+    "ryan",
+    "Ryan Wilcox",
+    "2026-03-28T10:00:00Z",
+    "2026-03-28T11:30:00Z",
+    90,
+    50,
+    25,
+    8,
+    3,
+    2,
+    1,
+    10,
+    5,
+    1,
+    3,
+    1200,
+    "single",
+    "webrtc",
+    "Pipeline: Missing In Action",
+    "assigned_to = 'Ryan Wilcox' AND opp_stage_selection = 'Missing In Action'",
+    "[{\"name\":\"John Smith\",\"business\":\"ABC Trucking\",\"phone\":\"+15551234567\",\"reason\":\"Wants $50K term loan, asked for app link\"}]",
+    "[\"Call John Smith back Thursday â€” wants to discuss terms\",\"Send app link to Jane Doe\"]",
+    "Strong session â€” 8 connects out of 25 calls. 3 interested leads including John Smith at ABC Trucking who wants a $50K term loan. 2 callbacks scheduled. Most no-answers were construction companies (likely on job sites). Recommend calling construction leads after 4pm next time.",
+    "[{\"name\":\"John Smith\",\"business\":\"ABC Trucking\",\"disposition\":\"interested\",\"duration\":180,\"notes\":\"Wants $50K, good credit, 5 years in business\"},{\"name\":\"Jane Doe\",\"business\":\"Quick Mart\",\"disposition\":\"callback\",\"duration\":60,\"notes\":\"Call back Thursday afternoon\"}]"
+  ]
+}
+```
+
+**Build the log from session data:** Use the session status, call log, and AI daily briefing to populate the fields. The `ai_recap` should be a 2-3 sentence human-readable summary. `hot_leads` and `follow_up_plan` should be JSON arrays. `call_details` should include every call with name, business, disposition, duration, and notes.
+
+### On Session Start: Review Prior Sessions
+
+**At the start of every session, check what happened recently:**
+
+```
+POST https://app.todaycapitalgroup.com/api/admin/claude/sql
+Header: X-Claude-API-Key: claude_99efff1a004422bdb67acf3f345f8a20e4fe8c29a734a82c132b2500d9fbd4bf
+Header: Content-Type: application/json
+Body: { "query": "SELECT started_at, duration_minutes, total_calls, connected, interested, callbacks, ai_recap, hot_leads, follow_up_plan FROM dialer_session_logs WHERE rep_id = 'ryan' ORDER BY started_at DESC LIMIT 5" }
+```
+
+**Use this to brief the rep:** "Last session you made 25 calls, connected with 8, and had 3 interested leads. John Smith at ABC Trucking wants a callback Thursday about a $50K term loan. Want me to start with your follow-ups from last time?"
+
+This gives continuity across sessions â€” the rep doesn't have to re-explain context, and you can prioritize follow-ups from prior sessions.
+
 ---
 
 ## Dashboard Features the Rep Can Self-Serve
