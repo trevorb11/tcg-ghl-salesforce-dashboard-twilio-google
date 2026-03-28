@@ -19,6 +19,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "sessionId required" }, { status: 400 });
   }
 
+  const includeLeads = req.nextUrl.searchParams.get("includeLeads") === "true";
+
   const session = await getSession(sessionId);
   if (!session) {
     return NextResponse.json({ error: "Session not found" }, { status: 404 });
@@ -102,5 +104,7 @@ export async function GET(req: NextRequest) {
       recordingUrl: c.recordingUrl || null,
       recordingSid: c.recordingSid || null,
     })),
+    // Include full leads array when requested (for dashboard sync)
+    ...(includeLeads ? { leads: session.leads.map(serializeLead) } : {}),
   });
 }

@@ -118,6 +118,7 @@ export default function DialerDashboard({
   const [currentLead, setCurrentLead] = useState<Lead | null>(null);
   const [callLog, setCallLog] = useState<CallLogEntry[]>([]);
   const [position, setPosition] = useState(0);
+  const [totalLeads, setTotalLeads] = useState(leads.length);
   const [notes, setNotes] = useState("");
   const [error, setError] = useState("");
   const [callTimer, setCallTimer] = useState(0);
@@ -163,6 +164,7 @@ export default function DialerDashboard({
       if (data.dialMode) setDialMode(data.dialMode);
       if (data.lines) setLinesCount(data.lines);
       if (data.batch) setBatchInfo(data.batch);
+      if (data.total) setTotalLeads(data.total);
       if (data.lastCallAnalysis && !lastAnalysis) {
         setLastAnalysis(data.lastCallAnalysis);
       }
@@ -562,7 +564,7 @@ export default function DialerDashboard({
         <div>
           <h1 className="text-2xl font-bold">Power Dialer</h1>
           <p className="text-gray-400">
-            {rep.name} &middot; {leads.length} leads loaded
+            {rep.name} &middot; {totalLeads} leads loaded
           </p>
         </div>
         <div className="flex items-center gap-4">
@@ -788,7 +790,7 @@ export default function DialerDashboard({
                     </div>
                     <div className="text-right">
                       <p className="text-sm text-gray-500">
-                        Lead {position} of {leads.length}
+                        Lead {position} of {totalLeads}
                       </p>
                       {status === "on_call" && (
                         <p className="text-2xl font-mono text-green-400 mt-1">

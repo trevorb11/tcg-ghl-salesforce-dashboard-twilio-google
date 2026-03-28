@@ -91,14 +91,14 @@ export default function Home() {
         if (sid) {
           setAutoSessionId(sid);
           // Fetch the session status to get the leads
-          apiFetch(`/api/dialer/status?sessionId=${sid}`)
+          apiFetch(`/api/dialer/status?sessionId=${sid}&includeLeads=true`)
             .then((r) => r.json())
             .then((status) => {
               if (status.error) {
                 // Session not found — fall back to lead loader
                 setScreen("load_leads");
               } else {
-                // Session is live — go to dialer with whatever leads we have
+                // Session is live — load leads from session and go to dialer
                 setLeads(status.leads || []);
                 setScreen("dialer");
               }
