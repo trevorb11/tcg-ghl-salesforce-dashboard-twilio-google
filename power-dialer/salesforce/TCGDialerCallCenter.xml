@@ -1,0 +1,24 @@
+<!--
+  TCG Power Dialer — Salesforce Call Center Definition
+
+  Upload this file in Salesforce:
+  Setup → Call Centers → Import → Upload this XML file
+
+  Then assign reps to the Call Center:
+  Setup → Call Centers → TCG Power Dialer → Manage Call Center Users → Add
+-->
+<callCenter>
+  <section sortOrder="0" name="reqGeneralInfo" label="General Information">
+    <item sortOrder="0" name="reqInternalName" label="Internal Name">TCGPowerDialer</item>
+    <item sortOrder="1" name="reqDisplayName" label="Display Name">TCG Power Dialer</item>
+    <item sortOrder="2" name="reqAdapterUrl" label="CTI Adapter URL">https://power-dialer-ten.vercel.app/cti</item>
+    <item sortOrder="3" name="reqUseApi" label="Use CTI API">true</item>
+    <item sortOrder="4" name="reqSoftphoneHeight" label="Softphone Height">550</item>
+    <item sortOrder="5" name="reqSoftphoneWidth" label="Softphone Width">320</item>
+  </section>
+  <section sortOrder="1" name="reqDialingOptions" label="Dialing Options">
+    <item sortOrder="0" name="reqOutsidePrefix" label="Outside Prefix">1</item>
+    <item sortOrder="1" name="reqLongDistPrefix" label="Long Distance Prefix">1</item>
+    <item sortOrder="2" name="reqInternationalPrefix" label="International Prefix">011</item>
+  </section>
+</callCenter>
