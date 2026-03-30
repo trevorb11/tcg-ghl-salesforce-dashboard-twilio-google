@@ -33,10 +33,13 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Normalize phone — ensure +1 prefix
-  let normalizedPhone = phone.replace(/\D/g, "");
-  if (normalizedPhone.length === 10) normalizedPhone = "1" + normalizedPhone;
-  if (!normalizedPhone.startsWith("+")) normalizedPhone = "+" + normalizedPhone;
+  // Normalize phone — ensure +1 prefix (phone is optional for WebRTC mode)
+  let normalizedPhone = "";
+  if (phone) {
+    normalizedPhone = phone.replace(/\D/g, "");
+    if (normalizedPhone.length === 10) normalizedPhone = "1" + normalizedPhone;
+    if (!normalizedPhone.startsWith("+")) normalizedPhone = "+" + normalizedPhone;
+  }
 
   return NextResponse.json({
     id: rep.id,
