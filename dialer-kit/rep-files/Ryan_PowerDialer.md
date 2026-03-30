@@ -53,7 +53,9 @@ Brief the rep: "Last session you made X calls, Y connected, Z interested. [Name]
 
 ## Loading Leads
 
-### Option 1: By Pipeline Stage
+**USE THESE APIS — they are fast and return ready-to-dial lead arrays.**
+
+### By Pipeline Stage
 
 | Rep says | Stage key |
 |---|---|
@@ -69,54 +71,63 @@ Brief the rep: "Last session you made X calls, Y connected, Z interested. [Name]
 | "hold list" | `hold` |
 | "follow ups" | `follow_up` |
 
-```bash
-curl -s "$DASHBOARD_URL/api/leads?stage=STAGE_KEY" -H "X-Dialer-Key: $DIALER_API_KEY"
+```
+GET https://power-dialer-ten.vercel.app/api/leads?stage=STAGE_KEY
+Header: X-Dialer-Key: 9808aca70802f6107fe904345b5adc32de4c342a07d33b20ab8b17158c625dfd
 ```
 
-### Option 2: Custom Criteria API (no SQL needed)
+### By Custom Criteria (PREFERRED for filtered lists)
 
-```bash
-curl -s -X POST "$DASHBOARD_URL/api/leads/query" \
-  -H "X-Dialer-Key: $DIALER_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"tags":["sba interest"],"industry":"construction","assignedTo":"Ryan Wilcox","monthlyRevenueMin":"notempty","limit":200}'
+```
+POST https://power-dialer-ten.vercel.app/api/leads/query
+Header: X-Dialer-Key: 9808aca70802f6107fe904345b5adc32de4c342a07d33b20ab8b17158c625dfd
+Header: Content-Type: application/json
+Body: {"assignedTo":"Ryan Wilcox","tags":["sba interest"],"industry":"construction","limit":200}
 ```
 
-Available filters: `tags` (array, matches any), `tagsAll` (array, matches all), `assignedTo`, `industry`, `pipeline`, `stage`, `monthlyRevenueMin`, `hasApproval` (boolean), `previouslyFunded` ("Yes"/"No"), `creditScore`, `limit`.
+**Available filters** — combine any:
 
-### Option 3: Custom SQL Query
+| Filter | Type | Example |
+|---|---|---|
+| `assignedTo` | string | `"Ryan Wilcox"` |
+| `tags` | array | `["sba","ucc leads"]` (matches ANY) |
+| `tagsAll` | array | `["sba","cali"]` (matches ALL) |
+| `industry` | string | `"construction"` (partial match) |
+| `pipeline` | string | `"App Sent"` (partial match) |
+| `stage` | string | `"Missing In Action"` (partial match) |
+| `monthlyRevenueMin` | string | `"notempty"` (has revenue data) |
+| `hasApproval` | boolean | `true` (has approval letter) |
+| `previouslyFunded` | string | `"Yes"` or `"No"` |
+| `creditScore` | string | `"700"` (partial match) |
+| `limit` | number | `200` (default 500, max 2000) |
 
-Query `dialer_contacts` directly. **Always filter by `assigned_to = 'Ryan Wilcox'`.**
+**Common rep requests → API calls:**
+
+| Rep says | Body |
+|---|---|
+| "SBA leads" | `{"assignedTo":"Ryan Wilcox","tags":["sba"],"limit":200}` |
+| "construction leads with revenue" | `{"assignedTo":"Ryan Wilcox","industry":"construction","monthlyRevenueMin":"notempty"}` |
+| "trucking in California" | `{"assignedTo":"Ryan Wilcox","industry":"trucking","tags":["cali"]}` |
+| "UCC leads" | `{"assignedTo":"Ryan Wilcox","tags":["ucc"]}` |
+| "top tier prospects" | `{"assignedTo":"Ryan Wilcox","tags":["top tier prospects"]}` |
+| "leads with approvals" | `{"assignedTo":"Ryan Wilcox","hasApproval":true}` |
+
+The response includes a `leads` array ready to pass to `/api/dialer/start`. No additional processing needed.
+
+### Phone Number Lookup
+
+```
+GET https://power-dialer-ten.vercel.app/api/contacts/lookup?phone=+15551234567
+Header: X-Dialer-Key: 9808aca70802f6107fe904345b5adc32de4c342a07d33b20ab8b17158c625dfd
+```
+
+### SQL Query (fallback — only if the above APIs don't cover the need)
 
 ```
 POST https://app.todaycapitalgroup.com/api/admin/claude/sql
 Header: X-Claude-API-Key: claude_99efff1a004422bdb67acf3f345f8a20e4fe8c29a734a82c132b2500d9fbd4bf
-Body: { "query": "SELECT ghl_contact_id, first_name, last_name, phone, email, business_name, opp_stage_selection, tags, monthly_revenue, industry_dropdown, last_note, call_disposition, sf_opportunity_id, sf_opp_stage, sf_contact_id FROM dialer_contacts WHERE assigned_to = 'Ryan Wilcox' AND phone IS NOT NULL AND phone != '' AND (dnd IS NULL OR dnd = '' OR dnd = 'false') AND [FILTERS] ORDER BY last_contacted ASC NULLS FIRST LIMIT 200" }
+Body: { "query": "SELECT * FROM dialer_contacts WHERE assigned_to = 'Ryan Wilcox' AND phone != '' AND [FILTERS] ORDER BY last_contacted ASC NULLS FIRST LIMIT 200" }
 ```
-
-**Common filters:**
-
-| Rep says | SQL filter |
-|---|---|
-| "SBA leads" | `tags ILIKE '%sba%'` |
-| "construction" | `industry_dropdown ILIKE '%construction%'` |
-| "trucking" | `industry_dropdown ILIKE '%trucking%'` |
-| "California / cali" | `tags ILIKE '%cali%' OR state ILIKE '%CA%'` |
-| "UCC leads" | `tags ILIKE '%ucc%'` |
-| "top tier" | `tags ILIKE '%top tier%'` |
-| "never contacted" | `last_contacted IS NULL OR last_contacted = ''` |
-| "has revenue" | `monthly_revenue IS NOT NULL AND monthly_revenue != ''` |
-| "no answer last time" | `call_disposition = 'No Answer'` |
-| "has SF opportunity" | `sf_opportunity_id IS NOT NULL` |
-| "in underwriting" | `sf_opp_stage = 'Underwriting'` |
-
-### Phone Number Lookup
-
-If the rep gives you a specific number to look up before calling:
-```bash
-curl -s "$DASHBOARD_URL/api/contacts/lookup?phone=+15551234567" -H "X-Dialer-Key: $DIALER_API_KEY"
-```
-Returns full contact details if found in the database.
 
 ---
 
