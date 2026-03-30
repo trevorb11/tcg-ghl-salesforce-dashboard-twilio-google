@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { apiFetch } from "@/lib/api-client";
 
 interface Rep {
@@ -126,12 +126,14 @@ type LoadMode = "pipeline" | "custom" | "upload" | "dialpad";
 export default function LeadLoader({
   rep,
   onLeadsLoaded,
+  initialDialNumber,
 }: {
   rep: Rep;
   onLeadsLoaded: (leads: Lead[]) => void;
+  initialDialNumber?: string | null;
 }) {
   const STAGE_GROUPS = rep.role === "admin" ? ADMIN_STAGE_GROUPS : REP_STAGE_GROUPS;
-  const [mode, setMode] = useState<LoadMode>("pipeline");
+  const [mode, setMode] = useState<LoadMode>(initialDialNumber ? "dialpad" : "pipeline");
   const [selectedCategory, setSelectedCategory] = useState("");
   const [selectedStage, setSelectedStage] = useState("");
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -143,9 +145,10 @@ export default function LeadLoader({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Dialpad state
-  const [dialpadNumber, setDialpadNumber] = useState("");
+  const [dialpadNumber, setDialpadNumber] = useState(initialDialNumber || "");
   const [dialpadName, setDialpadName] = useState("");
   const [dialpadBusiness, setDialpadBusiness] = useState("");
+  const initialLookupDone = useRef(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [dialpadContact, setDialpadContact] = useState<any>(null);
   const [dialpadLooking, setDialpadLooking] = useState(false);
@@ -160,6 +163,15 @@ export default function LeadLoader({
   const [filterPreviouslyFunded, setFilterPreviouslyFunded] = useState("");
   const [filterPipeline, setFilterPipeline] = useState("");
   const [filterLimit, setFilterLimit] = useState(200);
+
+  // Auto-lookup when opened with a dial number (e.g., from Salesforce click-to-dial)
+  useEffect(() => {
+    if (initialDialNumber && !initialLookupDone.current) {
+      initialLookupDone.current = true;
+      lookupContact(initialDialNumber);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialDialNumber]);
 
   const activeGroup = STAGE_GROUPS.find((g) => g.label === selectedCategory);
 

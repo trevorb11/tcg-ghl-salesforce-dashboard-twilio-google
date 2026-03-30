@@ -48,14 +48,20 @@ export default function Home() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [autoSessionId, setAutoSessionId] = useState<string | null>(null);
   const [autoError, setAutoError] = useState<string | null>(null);
+  const [dialNumber, setDialNumber] = useState<string | null>(null);
 
-  // On mount: check for ?token= auto-login param
+  // On mount: check for ?token= auto-login and ?dialNumber= click-to-dial
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const token = params.get("token");
     const sessionId = params.get("sessionId");
+    const dialNum = params.get("dialNumber") || params.get("dial") || params.get("phone");
 
-    if (!token) return;
+    // Store dial number for after login
+    if (dialNum) setDialNumber(dialNum);
+
+    if (!token && !dialNum) return;
+    if (!token) return; // Will handle dialNumber after manual login
 
     setScreen("auto_connecting");
 
@@ -163,7 +169,7 @@ export default function Home() {
       )}
 
       {screen === "load_leads" && rep && (
-        <LeadLoader rep={rep} onLeadsLoaded={handleLeadsLoaded} />
+        <LeadLoader rep={rep} onLeadsLoaded={handleLeadsLoaded} initialDialNumber={dialNumber} />
       )}
 
       {screen === "dialer" && rep && (
