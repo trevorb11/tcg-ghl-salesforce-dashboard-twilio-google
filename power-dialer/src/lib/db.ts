@@ -138,7 +138,12 @@ const LEAD_SELECT = `
          monthly_revenue, industry_dropdown, years_in_business,
          amount_requested, personal_credit_score_range, last_note,
          last_contacted, call_disposition, approval_letter,
-         previously_funded, current_positions_balances
+         previously_funded, current_positions_balances,
+         sf_lead_id, sf_contact_id, sf_opportunity_id, sf_account_id,
+         sf_lead_status, sf_opp_stage, sf_opp_amount, sf_owner_name,
+         sf_last_activity_date, sf_last_activity_type, sf_engagement_score,
+         sf_lead_score, sf_funding_type_interest, sf_amount_requested AS sf_amount_requested_val,
+         sf_follow_up_date, sf_notes
   FROM dialer_contacts
 `;
 
@@ -165,6 +170,19 @@ function rowToLead(row: Record<string, string>, fallbackStage?: string): Lead & 
     _approvalLetter: row.approval_letter || undefined,
     _previouslyFunded: row.previously_funded || undefined,
     _currentPositions: row.current_positions_balances || undefined,
+    // Salesforce IDs — used for SF record links
+    _salesforceId: row.sf_opportunity_id || row.sf_lead_id || row.sf_contact_id || undefined,
+    _salesforceType: row.sf_opportunity_id ? "Opportunity" : row.sf_lead_id ? "Lead" : row.sf_contact_id ? "Contact" : undefined,
+    // Extra SF context for reps
+    _sfLeadStatus: row.sf_lead_status || undefined,
+    _sfOppStage: row.sf_opp_stage || undefined,
+    _sfOppAmount: row.sf_opp_amount || undefined,
+    _sfOwner: row.sf_owner_name || undefined,
+    _sfLastActivity: row.sf_last_activity_date || undefined,
+    _sfEngagementScore: row.sf_engagement_score || undefined,
+    _sfLeadScore: row.sf_lead_score || undefined,
+    _sfFollowUpDate: row.sf_follow_up_date || undefined,
+    _sfNotes: row.sf_notes || undefined,
   };
 }
 
