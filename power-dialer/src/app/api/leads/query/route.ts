@@ -20,7 +20,10 @@ export async function POST(req: NextRequest) {
   const hasFilter = filters.tags?.length || filters.tagsAll?.length ||
     filters.assignedTo || filters.industry || filters.monthlyRevenueMin ||
     filters.amountRequestedMin || filters.previouslyFunded || filters.creditScore ||
-    filters.pipeline || filters.stage || filters.hasApproval;
+    filters.pipeline || filters.stage || filters.hasApproval ||
+    filters.state || filters.city || filters.areaCodes?.length ||
+    filters.lastDisposition || filters.neverContacted ||
+    filters.sfOppStage || filters.hasSfRecord;
 
   if (!hasFilter) {
     return NextResponse.json(

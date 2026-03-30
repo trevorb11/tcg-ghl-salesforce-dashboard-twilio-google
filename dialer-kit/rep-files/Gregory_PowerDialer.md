@@ -93,12 +93,19 @@ Body: {"assignedTo":"Gregory Dergevorkian","tags":["sba interest"],"industry":"c
 | `tags` | array | `["sba","ucc leads"]` (matches ANY) |
 | `tagsAll` | array | `["sba","cali"]` (matches ALL) |
 | `industry` | string | `"construction"` (partial match) |
+| `state` | string | `"CA,WA,OR"` (comma-separated, partial match) |
+| `city` | string | `"Los Angeles"` (partial match) |
+| `areaCodes` | array | `["213","310","818"]` (phone area codes) |
 | `pipeline` | string | `"App Sent"` (partial match) |
 | `stage` | string | `"Missing In Action"` (partial match) |
 | `monthlyRevenueMin` | string | `"notempty"` (has revenue data) |
 | `hasApproval` | boolean | `true` (has approval letter) |
 | `previouslyFunded` | string | `"Yes"` or `"No"` |
 | `creditScore` | string | `"700"` (partial match) |
+| `lastDisposition` | string | `"No Answer"` or `"Interested"` |
+| `neverContacted` | boolean | `true` (never been called) |
+| `sfOppStage` | string | `"Underwriting"` (SF opp stage) |
+| `hasSfRecord` | boolean | `true` (has Salesforce record) |
 | `limit` | number | `200` (default 500, max 2000) |
 
 **Common rep requests → API calls:**
@@ -107,10 +114,17 @@ Body: {"assignedTo":"Gregory Dergevorkian","tags":["sba interest"],"industry":"c
 |---|---|
 | "SBA leads" | `{"assignedTo":"Gregory Dergevorkian","tags":["sba"],"limit":200}` |
 | "construction leads with revenue" | `{"assignedTo":"Gregory Dergevorkian","industry":"construction","monthlyRevenueMin":"notempty"}` |
-| "trucking in California" | `{"assignedTo":"Gregory Dergevorkian","industry":"trucking","tags":["cali"]}` |
+| "trucking in California" | `{"assignedTo":"Gregory Dergevorkian","industry":"trucking","state":"CA"}` |
+| "west coast leads" | `{"assignedTo":"Gregory Dergevorkian","state":"CA,WA,OR,NV,AZ"}` |
+| "Florida leads" | `{"assignedTo":"Gregory Dergevorkian","state":"FL"}` |
+| "212 area code" | `{"assignedTo":"Gregory Dergevorkian","areaCodes":["212"]}` |
 | "UCC leads" | `{"assignedTo":"Gregory Dergevorkian","tags":["ucc"]}` |
 | "top tier prospects" | `{"assignedTo":"Gregory Dergevorkian","tags":["top tier prospects"]}` |
 | "leads with approvals" | `{"assignedTo":"Gregory Dergevorkian","hasApproval":true}` |
+| "no answers from last time" | `{"assignedTo":"Gregory Dergevorkian","lastDisposition":"No Answer"}` |
+| "fresh leads never called" | `{"assignedTo":"Gregory Dergevorkian","neverContacted":true}` |
+| "leads in underwriting" | `{"assignedTo":"Gregory Dergevorkian","sfOppStage":"Underwriting"}` |
+| "leads with SF records" | `{"assignedTo":"Gregory Dergevorkian","hasSfRecord":true}` |
 
 The response includes a `leads` array ready to pass to `/api/dialer/start`. No additional processing needed.
 

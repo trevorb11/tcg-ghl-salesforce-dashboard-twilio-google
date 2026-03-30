@@ -93,12 +93,19 @@ Body: {"assignedTo":"Kenny Nwobi","tags":["sba interest"],"industry":"constructi
 | `tags` | array | `["sba","ucc leads"]` (matches ANY) |
 | `tagsAll` | array | `["sba","cali"]` (matches ALL) |
 | `industry` | string | `"construction"` (partial match) |
+| `state` | string | `"CA,WA,OR"` (comma-separated, partial match) |
+| `city` | string | `"Los Angeles"` (partial match) |
+| `areaCodes` | array | `["213","310","818"]` (phone area codes) |
 | `pipeline` | string | `"App Sent"` (partial match) |
 | `stage` | string | `"Missing In Action"` (partial match) |
 | `monthlyRevenueMin` | string | `"notempty"` (has revenue data) |
 | `hasApproval` | boolean | `true` (has approval letter) |
 | `previouslyFunded` | string | `"Yes"` or `"No"` |
 | `creditScore` | string | `"700"` (partial match) |
+| `lastDisposition` | string | `"No Answer"` or `"Interested"` |
+| `neverContacted` | boolean | `true` (never been called) |
+| `sfOppStage` | string | `"Underwriting"` (SF opp stage) |
+| `hasSfRecord` | boolean | `true` (has Salesforce record) |
 | `limit` | number | `200` (default 500, max 2000) |
 
 **Common rep requests → API calls:**
@@ -107,10 +114,17 @@ Body: {"assignedTo":"Kenny Nwobi","tags":["sba interest"],"industry":"constructi
 |---|---|
 | "SBA leads" | `{"assignedTo":"Kenny Nwobi","tags":["sba"],"limit":200}` |
 | "construction leads with revenue" | `{"assignedTo":"Kenny Nwobi","industry":"construction","monthlyRevenueMin":"notempty"}` |
-| "trucking in California" | `{"assignedTo":"Kenny Nwobi","industry":"trucking","tags":["cali"]}` |
+| "trucking in California" | `{"assignedTo":"Kenny Nwobi","industry":"trucking","state":"CA"}` |
+| "west coast leads" | `{"assignedTo":"Kenny Nwobi","state":"CA,WA,OR,NV,AZ"}` |
+| "Florida leads" | `{"assignedTo":"Kenny Nwobi","state":"FL"}` |
+| "212 area code" | `{"assignedTo":"Kenny Nwobi","areaCodes":["212"]}` |
 | "UCC leads" | `{"assignedTo":"Kenny Nwobi","tags":["ucc"]}` |
 | "top tier prospects" | `{"assignedTo":"Kenny Nwobi","tags":["top tier prospects"]}` |
 | "leads with approvals" | `{"assignedTo":"Kenny Nwobi","hasApproval":true}` |
+| "no answers from last time" | `{"assignedTo":"Kenny Nwobi","lastDisposition":"No Answer"}` |
+| "fresh leads never called" | `{"assignedTo":"Kenny Nwobi","neverContacted":true}` |
+| "leads in underwriting" | `{"assignedTo":"Kenny Nwobi","sfOppStage":"Underwriting"}` |
+| "leads with SF records" | `{"assignedTo":"Kenny Nwobi","hasSfRecord":true}` |
 
 The response includes a `leads` array ready to pass to `/api/dialer/start`. No additional processing needed.
 

@@ -93,12 +93,19 @@ Body: {"assignedTo":"Ryan Wilcox","tags":["sba interest"],"industry":"constructi
 | `tags` | array | `["sba","ucc leads"]` (matches ANY) |
 | `tagsAll` | array | `["sba","cali"]` (matches ALL) |
 | `industry` | string | `"construction"` (partial match) |
+| `state` | string | `"CA,WA,OR"` (comma-separated, partial match) |
+| `city` | string | `"Los Angeles"` (partial match) |
+| `areaCodes` | array | `["213","310","818"]` (phone area codes) |
 | `pipeline` | string | `"App Sent"` (partial match) |
 | `stage` | string | `"Missing In Action"` (partial match) |
 | `monthlyRevenueMin` | string | `"notempty"` (has revenue data) |
 | `hasApproval` | boolean | `true` (has approval letter) |
 | `previouslyFunded` | string | `"Yes"` or `"No"` |
 | `creditScore` | string | `"700"` (partial match) |
+| `lastDisposition` | string | `"No Answer"` or `"Interested"` |
+| `neverContacted` | boolean | `true` (never been called) |
+| `sfOppStage` | string | `"Underwriting"` (SF opp stage) |
+| `hasSfRecord` | boolean | `true` (has Salesforce record) |
 | `limit` | number | `200` (default 500, max 2000) |
 
 **Common rep requests → API calls:**
@@ -107,10 +114,17 @@ Body: {"assignedTo":"Ryan Wilcox","tags":["sba interest"],"industry":"constructi
 |---|---|
 | "SBA leads" | `{"assignedTo":"Ryan Wilcox","tags":["sba"],"limit":200}` |
 | "construction leads with revenue" | `{"assignedTo":"Ryan Wilcox","industry":"construction","monthlyRevenueMin":"notempty"}` |
-| "trucking in California" | `{"assignedTo":"Ryan Wilcox","industry":"trucking","tags":["cali"]}` |
+| "trucking in California" | `{"assignedTo":"Ryan Wilcox","industry":"trucking","state":"CA"}` |
+| "west coast leads" | `{"assignedTo":"Ryan Wilcox","state":"CA,WA,OR,NV,AZ"}` |
+| "Florida leads" | `{"assignedTo":"Ryan Wilcox","state":"FL"}` |
+| "212 area code" | `{"assignedTo":"Ryan Wilcox","areaCodes":["212"]}` |
 | "UCC leads" | `{"assignedTo":"Ryan Wilcox","tags":["ucc"]}` |
 | "top tier prospects" | `{"assignedTo":"Ryan Wilcox","tags":["top tier prospects"]}` |
 | "leads with approvals" | `{"assignedTo":"Ryan Wilcox","hasApproval":true}` |
+| "no answers from last time" | `{"assignedTo":"Ryan Wilcox","lastDisposition":"No Answer"}` |
+| "fresh leads never called" | `{"assignedTo":"Ryan Wilcox","neverContacted":true}` |
+| "leads in underwriting" | `{"assignedTo":"Ryan Wilcox","sfOppStage":"Underwriting"}` |
+| "leads with SF records" | `{"assignedTo":"Ryan Wilcox","hasSfRecord":true}` |
 
 The response includes a `leads` array ready to pass to `/api/dialer/start`. No additional processing needed.
 

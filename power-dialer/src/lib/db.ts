@@ -219,6 +219,19 @@ export interface LeadFilter {
   hasPhone?: boolean;         // Has phone (default true)
   excludeDnd?: boolean;       // Exclude DND (default true)
   limit?: number;             // Max results (default 500)
+  // Geographic
+  state?: string;             // Comma-separated state codes or names (e.g. "CA,WA,OR")
+  city?: string;              // City partial match
+  areaCodes?: string[];       // Phone area codes (e.g. ["213","310","818"])
+  // Activity/status
+  lastDisposition?: string;   // Exact match (e.g. "No Answer", "Interested")
+  neverContacted?: boolean;   // Only leads with no last_contacted
+  contactedBefore?: string;   // Last contacted before this date
+  contactedAfter?: string;    // Last contacted after this date
+  // Salesforce
+  sfOppStage?: string;        // SF opportunity stage (partial match)
+  hasSfRecord?: boolean;      // Has any Salesforce ID
+  sfFollowUpBefore?: string;  // SF follow-up date before
 }
 
 export async function getLeadsByCriteria(filters: LeadFilter): Promise<Lead[]> {
@@ -293,6 +306,66 @@ export async function getLeadsByCriteria(filters: LeadFilter): Promise<Lead[]> {
 
   if (filters.hasApproval) {
     conditions.push("approval_letter IS NOT NULL AND approval_letter != ''");
+  }
+
+  // Geographic filters
+  if (filters.state) {
+    const states = filters.state.split(",").map(s => s.trim()).filter(Boolean);
+    if (states.length > 0) {
+      const stateConditions = states.map(s => {
+        params.push(`%${s}%`);
+        return `(state ILIKE $${paramIdx++} OR tags ILIKE $${paramIdx - 1})`;
+      });
+      conditions.push(`(${stateConditions.join(" OR ")})`);
+    }
+  }
+
+  if (filters.city) {
+    params.push(`%${filters.city}%`);
+    conditions.push(`city ILIKE $${paramIdx++}`);
+  }
+
+  if (filters.areaCodes && filters.areaCodes.length > 0) {
+    const acConditions = filters.areaCodes.map(ac => {
+      params.push(`%${ac}%`);
+      return `phone LIKE $${paramIdx++}`;
+    });
+    conditions.push(`(${acConditions.join(" OR ")})`);
+  }
+
+  // Activity/status filters
+  if (filters.lastDisposition) {
+    params.push(`%${filters.lastDisposition}%`);
+    conditions.push(`call_disposition ILIKE $${paramIdx++}`);
+  }
+
+  if (filters.neverContacted) {
+    conditions.push("(last_contacted IS NULL OR last_contacted = '')");
+  }
+
+  if (filters.contactedBefore) {
+    params.push(filters.contactedBefore);
+    conditions.push(`last_contacted < $${paramIdx++}`);
+  }
+
+  if (filters.contactedAfter) {
+    params.push(filters.contactedAfter);
+    conditions.push(`last_contacted > $${paramIdx++}`);
+  }
+
+  // Salesforce filters
+  if (filters.sfOppStage) {
+    params.push(`%${filters.sfOppStage}%`);
+    conditions.push(`sf_opp_stage ILIKE $${paramIdx++}`);
+  }
+
+  if (filters.hasSfRecord) {
+    conditions.push("(sf_contact_id IS NOT NULL OR sf_lead_id IS NOT NULL OR sf_opportunity_id IS NOT NULL)");
+  }
+
+  if (filters.sfFollowUpBefore) {
+    params.push(filters.sfFollowUpBefore);
+    conditions.push(`sf_follow_up_date <= $${paramIdx++}`);
   }
 
   const limit = Math.min(filters.limit || 500, 2000);
