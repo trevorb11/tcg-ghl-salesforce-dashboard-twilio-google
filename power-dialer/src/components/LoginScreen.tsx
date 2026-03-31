@@ -16,7 +16,6 @@ export default function LoginScreen({
   onLogin: (rep: Rep, apiKey: string) => void;
 }) {
   const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -30,7 +29,7 @@ export default function LoginScreen({
       const res = await fetch("/api/auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, phone, password }),
+        body: JSON.stringify({ email, password }),
       });
 
       const data = await res.json();
@@ -70,24 +69,9 @@ export default function LoginScreen({
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@todaycapitalgroup.com"
               required
+              autoFocus
               className="w-full px-4 py-2.5 bg-gray-900 border border-gray-800 rounded-lg text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
             />
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1.5">
-              Your Phone Number
-            </label>
-            <input
-              type="tel"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="(555) 123-4567"
-              className="w-full px-4 py-2.5 bg-gray-900 border border-gray-800 rounded-lg text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-            />
-            <p className="text-[11px] text-gray-600 mt-1">
-              Twilio calls this number to connect you to leads
-            </p>
           </div>
 
           <div>

@@ -154,6 +154,26 @@ export default function LeadLoader({
   const [dialpadLooking, setDialpadLooking] = useState(false);
   const lookupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Session history
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [sessionHistory, setSessionHistory] = useState<any[]>([]);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
+
+  // Fetch recent session history on mount
+  useEffect(() => {
+    async function fetchHistory() {
+      try {
+        const res = await apiFetch("/api/dialer/history?repId=" + rep.id);
+        if (res.ok) {
+          const data = await res.json();
+          setSessionHistory(data.sessions || []);
+        }
+      } catch { /* non-fatal */ }
+      setHistoryLoaded(true);
+    }
+    fetchHistory();
+  }, [rep.id]);
+
   // Custom criteria state
   const [filterTags, setFilterTags] = useState("");
   const [filterIndustry, setFilterIndustry] = useState("");
@@ -370,6 +390,54 @@ export default function LeadLoader({
             Welcome back, <span className="text-white font-medium">{rep.name}</span>
           </p>
         </div>
+
+        {/* Session History */}
+        {historyLoaded && sessionHistory.length > 0 && !loaded && (
+          <div className="mb-5 bg-gray-900/50 border border-gray-800 rounded-lg p-4">
+            <h3 className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">Recent Sessions</h3>
+            <div className="space-y-2">
+              {sessionHistory.slice(0, 3).map((s, i) => {
+                const date = s.started_at ? new Date(s.started_at).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "—";
+                return (
+                  <div key={i} className="flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-3">
+                      <span className="text-gray-500 w-12">{date}</span>
+                      <span className="text-gray-300">{s.total_calls || 0} calls</span>
+                      <span className="text-green-500">{s.connected || 0} connects</span>
+                      <span className="text-green-400">{s.interested || 0} interested</span>
+                    </div>
+                    {s.duration_minutes && (
+                      <span className="text-gray-600">{s.duration_minutes}m</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            {sessionHistory[0]?.ai_recap && (
+              <p className="text-xs text-gray-500 mt-2 pt-2 border-t border-gray-800 line-clamp-2">
+                {sessionHistory[0].ai_recap}
+              </p>
+            )}
+            {sessionHistory[0]?.follow_up_plan && (() => {
+              try {
+                const plan = typeof sessionHistory[0].follow_up_plan === "string"
+                  ? JSON.parse(sessionHistory[0].follow_up_plan)
+                  : sessionHistory[0].follow_up_plan;
+                if (Array.isArray(plan) && plan.length > 0) {
+                  return (
+                    <div className="mt-2">
+                      <p className="text-[10px] text-blue-400 uppercase tracking-wider mb-1">Follow-ups from last session</p>
+                      {plan.slice(0, 2).map((item: string, j: number) => (
+                        <p key={j} className="text-xs text-gray-400">{j + 1}. {item}</p>
+                      ))}
+                    </div>
+                  );
+                }
+              } catch { /* non-fatal */ }
+              return null;
+            })()}
+          </div>
+        )}
 
         {/* Mode Tabs */}
         <div className="flex rounded-lg bg-gray-900 p-1 mb-6">
