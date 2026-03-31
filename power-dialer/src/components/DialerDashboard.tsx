@@ -73,6 +73,10 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
   const [autoAdvance, setAutoAdvance] = useState(true);
   const autoAdvanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Callback date picker
+  const [showCallbackPicker, setShowCallbackPicker] = useState(false);
+  const [callbackDate, setCallbackDate] = useState("");
+
   // AI + summary
   const [lastAnalysis, setLastAnalysis] = useState<CallAnalysis | null>(null);
   const [analyzingCall, setAnalyzingCall] = useState(false);
@@ -246,11 +250,23 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
 
   async function handleDisposition(disposition: Disposition) {
     if (!sessionId) return;
+
+    // Callback: show date picker first
+    if (disposition === "callback" && !callbackDate) {
+      setShowCallbackPicker(true);
+      return;
+    }
+
     try {
-      const res = await apiFetch("/api/dialer/disposition", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessionId, disposition, notes }) });
+      const body: Record<string, unknown> = { sessionId, disposition, notes };
+      if (disposition === "callback" && callbackDate) {
+        body.callbackDate = callbackDate;
+      }
+
+      const res = await apiFetch("/api/dialer/disposition", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      setNotes(""); setLastAnalysis(null);
+      setNotes(""); setLastAnalysis(null); setShowCallbackPicker(false); setCallbackDate("");
 
       // Auto-advance: dial next after a short pause
       if (autoAdvance) {
@@ -618,6 +634,48 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
                   </button>
                 ))}
               </div>
+
+              {/* Callback date picker */}
+              {showCallbackPicker && (
+                <div className="mb-3 p-3 bg-blue-900/20 border border-blue-800/40 rounded-lg">
+                  <p className="text-xs text-blue-300 mb-2 font-medium">When should we call back?</p>
+                  <div className="flex gap-2">
+                    <input
+                      type="date"
+                      value={callbackDate}
+                      onChange={e => setCallbackDate(e.target.value)}
+                      min={new Date().toISOString().split("T")[0]}
+                      className="flex-1 px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <button
+                      onClick={() => { if (callbackDate) handleDisposition("callback"); }}
+                      disabled={!callbackDate}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 text-white text-sm font-medium rounded-lg"
+                    >
+                      Set Callback
+                    </button>
+                    <button
+                      onClick={() => { setShowCallbackPicker(false); setCallbackDate(""); }}
+                      className="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-lg"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                  <div className="flex gap-1.5 mt-2">
+                    {["Tomorrow", "2 days", "3 days", "1 week"].map(label => {
+                      const days = label === "Tomorrow" ? 1 : label === "2 days" ? 2 : label === "3 days" ? 3 : 7;
+                      const d = new Date(); d.setDate(d.getDate() + days);
+                      const val = d.toISOString().split("T")[0];
+                      return (
+                        <button key={label} onClick={() => setCallbackDate(val)}
+                          className={`px-2.5 py-1 text-[10px] rounded-md transition-colors ${callbackDate === val ? "bg-blue-600 text-white" : "bg-gray-800 text-gray-400 hover:text-gray-300"}`}>
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Notes — visible during on_call AND wrap_up */}
               <textarea

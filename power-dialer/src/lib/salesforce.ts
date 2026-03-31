@@ -90,17 +90,22 @@ export async function createCallTask(params: {
  */
 export async function updateContactDisposition(
   sfContactId: string,
-  disposition: string
+  disposition: string,
+  callbackDate?: string
 ): Promise<boolean> {
   if (!SF_ACCESS_TOKEN || !sfContactId) return false;
 
   const dispLabel = DISPOSITION_LABELS[disposition] || disposition;
 
   try {
-    await sfApi(`/sobjects/Contact/${sfContactId}`, "PATCH", {
+    const fields: Record<string, unknown> = {
       Call_Disposition__c: dispLabel,
       Last_Contacted__c: new Date().toISOString().split("T")[0],
-    });
+    };
+    if (callbackDate) {
+      fields.Follow_up_Date__c = callbackDate;
+    }
+    await sfApi(`/sobjects/Contact/${sfContactId}`, "PATCH", fields);
     return true;
   } catch (err) {
     console.error("[SF] Contact update failed:", err);
@@ -113,16 +118,19 @@ export async function updateContactDisposition(
  */
 export async function updateLeadDisposition(
   sfLeadId: string,
-  disposition: string
+  disposition: string,
+  callbackDate?: string
 ): Promise<boolean> {
   if (!SF_ACCESS_TOKEN || !sfLeadId) return false;
 
-  const dispLabel = DISPOSITION_LABELS[disposition] || disposition;
-
   try {
-    await sfApi(`/sobjects/Lead/${sfLeadId}`, "PATCH", {
+    const fields: Record<string, unknown> = {
       Last_Contacted__c: new Date().toISOString().split("T")[0],
-    });
+    };
+    if (callbackDate) {
+      fields.Follow_Up_Date__c = callbackDate;
+    }
+    await sfApi(`/sobjects/Lead/${sfLeadId}`, "PATCH", fields);
     return true;
   } catch (err) {
     console.error("[SF] Lead update failed:", err);
@@ -144,6 +152,7 @@ export async function syncCallToSalesforce(params: {
   repName?: string;
   leadName?: string;
   businessName?: string;
+  callbackDate?: string;
 }): Promise<{ taskId: string | null; contactUpdated: boolean; leadUpdated: boolean }> {
   const [taskId, contactUpdated, leadUpdated] = await Promise.all([
     createCallTask({
@@ -158,10 +167,10 @@ export async function syncCallToSalesforce(params: {
       businessName: params.businessName,
     }),
     params.sfContactId
-      ? updateContactDisposition(params.sfContactId, params.disposition)
+      ? updateContactDisposition(params.sfContactId, params.disposition, params.callbackDate)
       : Promise.resolve(false),
     params.sfLeadId
-      ? updateLeadDisposition(params.sfLeadId, params.disposition)
+      ? updateLeadDisposition(params.sfLeadId, params.disposition, params.callbackDate)
       : Promise.resolve(false),
   ]);
 

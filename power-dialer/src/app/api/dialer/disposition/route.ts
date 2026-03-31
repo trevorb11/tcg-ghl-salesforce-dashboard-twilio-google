@@ -28,10 +28,11 @@ export async function POST(req: NextRequest) {
   const authError = requireAuth(req);
   if (authError) return authError;
 
-  const { sessionId, disposition, notes } = await req.json() as {
+  const { sessionId, disposition, notes, callbackDate } = await req.json() as {
     sessionId: string;
     disposition: Disposition;
     notes?: string;
+    callbackDate?: string; // ISO date string (e.g. "2026-04-03") for callback follow-up
   };
 
   const session = await getSession(sessionId);
@@ -84,7 +85,29 @@ export async function POST(req: NextRequest) {
     )
   );
 
-  // 2. Salesforce — Task + Contact/Lead field update
+  // 1b. GHL — update Follow Up Date if callback
+  if (disposition === "callback" && callbackDate && lastCall.leadId) {
+    syncPromises.push(
+      fetch(`https://services.leadconnectorhq.com/contacts/${lastCall.leadId}`, {
+        method: "PUT",
+        headers: {
+          "Authorization": `Bearer ${process.env.GHL_API_KEY}`,
+          "Version": "2021-07-28",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          customFields: [
+            { id: "HIUNWd157AipcEJgWPPW", value: callbackDate }, // Follow Up Date
+          ],
+        }),
+      }).then(r => {
+        if (r.ok) console.log(`[Disposition] GHL Follow Up Date set to ${callbackDate}`);
+        else console.error("[Disposition] GHL Follow Up Date update failed:", r.status);
+      }).catch(err => console.error("[Disposition] GHL Follow Up Date error:", err))
+    );
+  }
+
+  // 2. Salesforce — Task + Contact/Lead field update + Follow Up Date
   syncPromises.push(
     syncCallToSalesforce({
       sfContactId,
@@ -96,6 +119,7 @@ export async function POST(req: NextRequest) {
       repName: session.repName,
       leadName: lastCall.leadName,
       businessName: lastCall.leadBusinessName,
+      callbackDate,
     }).then(result => {
       if (result.taskId) console.log(`[Disposition] SF Task created: ${result.taskId}`);
       if (result.contactUpdated) console.log("[Disposition] SF Contact updated");
@@ -116,9 +140,11 @@ export async function POST(req: NextRequest) {
           dialer_call_count = COALESCE(dialer_call_count, 0) + 1,
           dialer_last_called_at = NOW(),
           dialer_last_disposition = $1,
+          follow_up_date = $5,
+          sf_follow_up_date = $5,
           updated_at = NOW()
         WHERE ghl_contact_id = $4`,
-        [dispLabel, dateStr, notes || `${dispLabel} — ${dateStr}`, lastCall.leadId]
+        [dispLabel, dateStr, notes || `${dispLabel} — ${dateStr}`, lastCall.leadId, callbackDate || null]
       ).catch(err =>
         console.error("[Disposition] DB update failed:", err)
       )
