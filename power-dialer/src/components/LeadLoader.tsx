@@ -227,12 +227,13 @@ export default function LeadLoader({
     setSmartDescription("");
 
     try {
-      const res = await apiFetch(`/api/leads/search?q=${encodeURIComponent(smartQuery)}&rep=${encodeURIComponent(rep.name)}`);
+      // Use AI-powered search (Claude Haiku) — falls back to pattern matching if AI unavailable
+      const res = await apiFetch(`/api/leads/ai-search?q=${encodeURIComponent(smartQuery)}&rep=${encodeURIComponent(rep.name)}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 
       setLeads(data.leads);
-      setListLabel(`Smart Search: "${smartQuery}"`);
+      setListLabel(`${data.count} leads found`);
       setSmartDescription(data.description || "");
       setLoaded(true);
     } catch (err: unknown) {
@@ -557,7 +558,7 @@ export default function LeadLoader({
                   value={smartQuery}
                   onChange={(e) => setSmartQuery(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter") smartSearch(); }}
-                  placeholder="Try: construction leads in Florida with revenue..."
+                  placeholder="Describe the list you want... e.g. construction in Florida revenue over $30k"
                   className="flex-1 px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                 />
                 <button
@@ -572,7 +573,7 @@ export default function LeadLoader({
                 <p className="text-xs text-blue-400 mt-1.5">Searching: {smartDescription}</p>
               )}
               <p className="text-[10px] text-gray-600 mt-1">
-                Understands: industries, states, regions, tags, dispositions, revenue, approvals, area codes
+                AI-powered — understands revenue ranges, industries, locations, credit scores, tags, and more
               </p>
             </div>
 
