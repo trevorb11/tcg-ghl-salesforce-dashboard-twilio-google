@@ -184,6 +184,10 @@ export default function LeadLoader({
   const [filterPipeline, setFilterPipeline] = useState("");
   const [filterLimit, setFilterLimit] = useState(200);
 
+  // Smart search
+  const [smartQuery, setSmartQuery] = useState("");
+  const [smartDescription, setSmartDescription] = useState("");
+
   // Auto-lookup when opened with a dial number (e.g., from Salesforce click-to-dial)
   useEffect(() => {
     if (initialDialNumber && !initialLookupDone.current) {
@@ -210,6 +214,29 @@ export default function LeadLoader({
       setLoaded(true);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to load leads";
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function smartSearch() {
+    if (!smartQuery.trim()) return;
+    setLoading(true);
+    setError("");
+    setSmartDescription("");
+
+    try {
+      const res = await apiFetch(`/api/leads/search?q=${encodeURIComponent(smartQuery)}&rep=${encodeURIComponent(rep.name)}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      setLeads(data.leads);
+      setListLabel(`Smart Search: "${smartQuery}"`);
+      setSmartDescription(data.description || "");
+      setLoaded(true);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Search failed";
       setError(msg);
     } finally {
       setLoading(false);
@@ -522,9 +549,38 @@ export default function LeadLoader({
         {/* Custom List Builder */}
         {mode === "custom" && !loaded && (
           <div className="space-y-4">
-            <p className="text-gray-500 text-sm">
-              Set criteria to build a targeted dial list from your contact database.
-            </p>
+            {/* Smart Search */}
+            <div>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={smartQuery}
+                  onChange={(e) => setSmartQuery(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") smartSearch(); }}
+                  placeholder="Try: construction leads in Florida with revenue..."
+                  className="flex-1 px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                />
+                <button
+                  onClick={smartSearch}
+                  disabled={loading || !smartQuery.trim()}
+                  className="px-5 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 text-white font-semibold rounded-lg text-sm"
+                >
+                  {loading ? "..." : "Search"}
+                </button>
+              </div>
+              {smartDescription && (
+                <p className="text-xs text-blue-400 mt-1.5">Searching: {smartDescription}</p>
+              )}
+              <p className="text-[10px] text-gray-600 mt-1">
+                Understands: industries, states, regions, tags, dispositions, revenue, approvals, area codes
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className="flex-1 h-px bg-gray-800" />
+              <span className="text-[10px] text-gray-600 uppercase">or set filters manually</span>
+              <div className="flex-1 h-px bg-gray-800" />
+            </div>
 
             {/* Tags */}
             <div>
