@@ -35,6 +35,45 @@ export function useSignalWireWebRTC(): UseSignalWireWebRTCReturn {
   const currentCallRef = useRef<any>(null);
   const configRef = useRef<WebRTCConfig | null>(null);
 
+  // Ring tone generator — plays a US-style ringback tone using Web Audio API
+  const ringCtxRef = useRef<AudioContext | null>(null);
+  const ringIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  function startRingTone() {
+    if (typeof window === "undefined") return;
+    stopRingTone();
+    try {
+      const ctx = new AudioContext();
+      ringCtxRef.current = ctx;
+
+      // US ringback: 440Hz + 480Hz, 2s on / 4s off
+      function playRingBurst() {
+        const now = ctx.currentTime;
+        const osc1 = ctx.createOscillator();
+        const osc2 = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc1.frequency.value = 440;
+        osc2.frequency.value = 480;
+        gain.gain.value = 0.08; // Quiet
+        osc1.connect(gain);
+        osc2.connect(gain);
+        gain.connect(ctx.destination);
+        osc1.start(now);
+        osc2.start(now);
+        osc1.stop(now + 2);
+        osc2.stop(now + 2);
+      }
+
+      playRingBurst();
+      ringIntervalRef.current = setInterval(playRingBurst, 6000); // 2s tone + 4s silence
+    } catch { /* AudioContext not available */ }
+  }
+
+  function stopRingTone() {
+    if (ringIntervalRef.current) { clearInterval(ringIntervalRef.current); ringIntervalRef.current = null; }
+    if (ringCtxRef.current) { try { ringCtxRef.current.close(); } catch {} ringCtxRef.current = null; }
+  }
+
   // Create hidden audio element for remote audio
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -99,19 +138,22 @@ export function useSignalWireWebRTC(): UseSignalWireWebRTCReturn {
 
           switch (call.state) {
             case "trying":
-              // Outbound call initiated
+              // Outbound call initiated — start ring tone
               currentCallRef.current = call;
+              startRingTone();
               break;
             case "early":
-              // Ringing / early media
+              // Ringing / early media — keep ring tone going
               break;
             case "active":
-              // Call connected — lead answered!
+              // Call connected — lead answered! Stop ring tone
+              stopRingTone();
               setIsOnCall(true);
               currentCallRef.current = call;
               break;
             case "hangup":
             case "destroy":
+              stopRingTone();
               setIsOnCall(false);
               setCallState("idle");
               currentCallRef.current = null;
@@ -184,6 +226,7 @@ export function useSignalWireWebRTC(): UseSignalWireWebRTCReturn {
 
   const disconnect = useCallback(() => {
     hangupCall();
+    stopRingTone();
     if (clientRef.current) {
       try { clientRef.current.disconnect(); } catch { /* cleanup */ }
       clientRef.current = null;
