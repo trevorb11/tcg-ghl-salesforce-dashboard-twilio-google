@@ -92,6 +92,11 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
   // WebRTC lead tracking
   const webrtcLeadIndexRef = useRef(0);
 
+  // Skip undo toast
+  const [skippedLead, setSkippedLead] = useState<{lead: Lead; index: number} | null>(null);
+  const [showUndoToast, setShowUndoToast] = useState(false);
+  const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // ── Live session stats ─────────────────────────────────
   const stats = {
     calls: callLog.length,
@@ -279,11 +284,32 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
   }
 
   function skipLead() {
+    // Save current lead for undo
+    if (currentLead) {
+      const idx = connectionMode === "webrtc" ? webrtcLeadIndexRef.current - 1 : position - 1;
+      setSkippedLead({ lead: currentLead, index: idx });
+      setShowUndoToast(true);
+      if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+      undoTimerRef.current = setTimeout(() => { setShowUndoToast(false); setSkippedLead(null); }, 3000);
+    }
+
     // In WebRTC mode, hang up current call and advance
     if (connectionMode === "webrtc") {
       webrtc.hangupCall();
     }
     handleDisposition("no_answer");
+  }
+
+  function undoSkip() {
+    if (!skippedLead) return;
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    setCurrentLead(skippedLead.lead);
+    if (connectionMode === "webrtc") {
+      webrtcLeadIndexRef.current = skippedLead.index;
+    }
+    setShowUndoToast(false);
+    setSkippedLead(null);
+    setStatus("connecting_rep");
   }
 
   function pauseSession() { setStatus("paused"); }
@@ -505,6 +531,24 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
                       {currentLead.businessName && <p className="text-gray-400">{currentLead.businessName}</p>}
                       <div className="flex items-center gap-2 mt-1">
                         <span className="text-gray-500 text-sm">{currentLead.phone}</span>
+                      </div>
+                      {/* Inline context tags */}
+                      <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                        {currentLead._industry && (
+                          <span className="px-2 py-0.5 bg-gray-800 text-gray-400 text-[10px] rounded-full">{currentLead._industry}</span>
+                        )}
+                        {currentLead._monthlyRevenue && (
+                          <span className="px-2 py-0.5 bg-emerald-900/30 text-emerald-400 text-[10px] rounded-full">Rev: {currentLead._monthlyRevenue}</span>
+                        )}
+                        {currentLead._lastDisposition && (
+                          <span className="px-2 py-0.5 bg-blue-900/30 text-blue-400 text-[10px] rounded-full">Last: {currentLead._lastDisposition}</span>
+                        )}
+                        {currentLead._creditScore && (
+                          <span className="px-2 py-0.5 bg-gray-800 text-gray-400 text-[10px] rounded-full">Credit: {currentLead._creditScore}</span>
+                        )}
+                      </div>
+                      {/* CRM links */}
+                      <div className="flex items-center gap-2 mt-1">
                         {currentLead.id && !currentLead.id.startsWith("db-") && !currentLead.id.startsWith("upload-") && (
                           <a href={`https://app.gohighlevel.com/v2/location/n778xwOps9t8Q34eRPfM/contacts/detail/${currentLead.id}`} target="_blank" rel="noopener noreferrer" className="text-orange-400 text-xs hover:underline">GHL &rarr;</a>
                         )}
@@ -812,6 +856,14 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
           )}
         </div>
       </div>
+
+      {/* Skip undo toast */}
+      {showUndoToast && skippedLead && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 bg-gray-800 border border-gray-700 rounded-lg shadow-xl flex items-center gap-3">
+          <span className="text-sm text-gray-300">Skipped {skippedLead.lead.name}</span>
+          <button onClick={undoSkip} className="text-blue-400 text-sm font-medium hover:text-blue-300">Undo</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -857,6 +909,13 @@ function LeadContextCard({ lead }: { lead: Lead }) {
       )}
       {lead._lastDisposition && <p className="text-xs text-gray-500 mb-1">Last: {lead._lastDisposition}{lead.lastContactedAt ? ` (${lead.lastContactedAt})` : ""}</p>}
       {lead._lastNote && <p className="text-xs text-gray-500 line-clamp-2">{lead._lastNote}</p>}
+      {lead._lastDisposition && lead.lastContactedAt && (
+        <div className="flex items-center gap-1.5 text-xs text-gray-500 mt-1">
+          <span>Called {lead.lastContactedAt}</span>
+          <span>&middot;</span>
+          <span>{lead._lastDisposition}</span>
+        </div>
+      )}
       {lead.tags && lead.tags.length > 0 && (
         <div className="flex flex-wrap gap-1 mt-1.5">
           {lead.tags.slice(0, 5).map((t, i) => <span key={i} className="px-1.5 py-0.5 bg-gray-700/40 text-gray-500 text-[9px] rounded-full">{t}</span>)}

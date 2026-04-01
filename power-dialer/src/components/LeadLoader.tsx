@@ -187,6 +187,48 @@ export default function LeadLoader({
   // Smart search
   const [smartQuery, setSmartQuery] = useState("");
   const [smartDescription, setSmartDescription] = useState("");
+  const [smartSearchSuccess, setSmartSearchSuccess] = useState(false);
+
+  // Saved searches
+  const [savedSearches, setSavedSearches] = useState<{name: string; query: string}[]>([]);
+
+  // Callback queue
+  const [callbackLeads, setCallbackLeads] = useState<Lead[]>([]);
+  const [callbackCount, setCallbackCount] = useState(0);
+  const [callbackDismissed, setCallbackDismissed] = useState(false);
+
+  // Load saved searches from localStorage on mount
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("tcg-saved-searches");
+      if (stored) setSavedSearches(JSON.parse(stored));
+    } catch { /* non-fatal */ }
+  }, []);
+
+  // Check for due callbacks after session history loads
+  useEffect(() => {
+    if (!historyLoaded) return;
+    async function checkCallbacks() {
+      try {
+        const res = await apiFetch("/api/leads/query", {
+          method: "POST",
+          body: JSON.stringify({
+            assignedTo: rep.name,
+            lastDisposition: "Callback",
+            limit: 50,
+          }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.leads && data.leads.length > 0) {
+            setCallbackLeads(data.leads);
+            setCallbackCount(data.leads.length);
+          }
+        }
+      } catch { /* non-fatal */ }
+    }
+    checkCallbacks();
+  }, [historyLoaded, rep.name]);
 
   // Auto-lookup when opened with a dial number (e.g., from Salesforce click-to-dial)
   useEffect(() => {
@@ -220,15 +262,18 @@ export default function LeadLoader({
     }
   }
 
-  async function smartSearch() {
-    if (!smartQuery.trim()) return;
+  async function smartSearch(queryOverride?: string) {
+    const q = queryOverride || smartQuery;
+    if (!q.trim()) return;
+    if (!queryOverride) setSmartQuery(q);
     setLoading(true);
     setError("");
     setSmartDescription("");
+    setSmartSearchSuccess(false);
 
     try {
       // Use AI-powered search (Claude Haiku) — falls back to pattern matching if AI unavailable
-      const res = await apiFetch(`/api/leads/ai-search?q=${encodeURIComponent(smartQuery)}&rep=${encodeURIComponent(rep.name)}`);
+      const res = await apiFetch(`/api/leads/ai-search?q=${encodeURIComponent(q)}&rep=${encodeURIComponent(rep.name)}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 
@@ -236,12 +281,33 @@ export default function LeadLoader({
       setListLabel(`${data.count} leads found`);
       setSmartDescription(data.description || "");
       setLoaded(true);
+      setSmartSearchSuccess(true);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Search failed";
       setError(msg);
     } finally {
       setLoading(false);
     }
+  }
+
+  function saveCurrentSearch() {
+    const name = prompt("Name this search:");
+    if (!name?.trim()) return;
+    const updated = [...savedSearches, { name: name.trim(), query: smartQuery }];
+    setSavedSearches(updated);
+    localStorage.setItem("tcg-saved-searches", JSON.stringify(updated));
+    setSmartSearchSuccess(false);
+  }
+
+  function deleteSavedSearch(index: number) {
+    const updated = savedSearches.filter((_, i) => i !== index);
+    setSavedSearches(updated);
+    localStorage.setItem("tcg-saved-searches", JSON.stringify(updated));
+  }
+
+  function loadSavedSearch(search: {name: string; query: string}) {
+    setSmartQuery(search.query);
+    smartSearch(search.query);
   }
 
   async function loadCustomList() {
@@ -467,6 +533,34 @@ export default function LeadLoader({
           </div>
         )}
 
+        {/* Callback Queue Banner */}
+        {callbackCount > 0 && !callbackDismissed && !loaded && (
+          <div className="mb-5 bg-blue-900/20 border border-blue-700/40 rounded-lg p-4 flex items-center justify-between">
+            <div>
+              <p className="text-blue-300 font-medium text-sm">You have {callbackCount} callback{callbackCount !== 1 ? "s" : ""} due today.</p>
+              <p className="text-blue-400/60 text-xs mt-0.5">Load them into the dialer?</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  setLeads(callbackLeads);
+                  setListLabel("Callbacks Due");
+                  setLoaded(true);
+                }}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-colors"
+              >
+                Load Callbacks
+              </button>
+              <button
+                onClick={() => setCallbackDismissed(true)}
+                className="text-gray-500 hover:text-gray-400 px-2 py-1 text-sm"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Mode Tabs */}
         <div className="flex rounded-lg bg-gray-900 p-1 mb-6">
           {(["pipeline", "custom", "dialpad", "upload"] as LoadMode[]).map((m) => (
@@ -550,6 +644,25 @@ export default function LeadLoader({
         {/* Custom List Builder */}
         {mode === "custom" && !loaded && (
           <div className="space-y-4">
+            {/* Saved Searches */}
+            {savedSearches.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[10px] text-gray-600 uppercase tracking-wider mr-1">Saved:</span>
+                {savedSearches.map((s, i) => (
+                  <button
+                    key={i}
+                    className="group flex items-center gap-1 px-2.5 py-1 bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs rounded-full transition-colors"
+                  >
+                    <span onClick={() => loadSavedSearch(s)}>{s.name}</span>
+                    <span
+                      onClick={(e) => { e.stopPropagation(); deleteSavedSearch(i); }}
+                      className="text-gray-600 hover:text-red-400 ml-0.5 transition-colors"
+                    >&times;</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
             {/* Smart Search */}
             <div>
               <div className="flex gap-2">
@@ -562,7 +675,7 @@ export default function LeadLoader({
                   className="flex-1 px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                 />
                 <button
-                  onClick={smartSearch}
+                  onClick={() => smartSearch()}
                   disabled={loading || !smartQuery.trim()}
                   className="px-5 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 text-white font-semibold rounded-lg text-sm"
                 >
@@ -570,7 +683,17 @@ export default function LeadLoader({
                 </button>
               </div>
               {smartDescription && (
-                <p className="text-xs text-blue-400 mt-1.5">Searching: {smartDescription}</p>
+                <div className="flex items-center gap-2 mt-1.5">
+                  <p className="text-xs text-blue-400">Searching: {smartDescription}</p>
+                  {smartSearchSuccess && (
+                    <button
+                      onClick={saveCurrentSearch}
+                      className="text-xs text-gray-500 hover:text-blue-400 transition-colors"
+                    >
+                      Save this search
+                    </button>
+                  )}
+                </div>
               )}
               <p className="text-[10px] text-gray-600 mt-1">
                 AI-powered — understands revenue ranges, industries, locations, credit scores, tags, and more

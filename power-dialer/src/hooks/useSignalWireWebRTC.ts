@@ -54,7 +54,7 @@ export function useSignalWireWebRTC(): UseSignalWireWebRTCReturn {
         const gain = ctx.createGain();
         osc1.frequency.value = 440;
         osc2.frequency.value = 480;
-        gain.gain.value = 0.08; // Quiet
+        gain.gain.value = 0.15; // Louder but not jarring
         osc1.connect(gain);
         osc2.connect(gain);
         gain.connect(ctx.destination);
@@ -67,6 +67,21 @@ export function useSignalWireWebRTC(): UseSignalWireWebRTCReturn {
       playRingBurst();
       ringIntervalRef.current = setInterval(playRingBurst, 6000); // 2s tone + 4s silence
     } catch { /* AudioContext not available */ }
+  }
+
+  function playConnectedChime() {
+    try {
+      const ctx = new AudioContext();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.frequency.value = 800;
+      gain.gain.setValueAtTime(0.12, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.3);
+    } catch {}
   }
 
   function stopRingTone() {
@@ -146,8 +161,9 @@ export function useSignalWireWebRTC(): UseSignalWireWebRTCReturn {
               // Ringing / early media — keep ring tone going
               break;
             case "active":
-              // Call connected — lead answered! Stop ring tone
+              // Call connected — lead answered! Stop ring tone, play chime
               stopRingTone();
+              playConnectedChime();
               setIsOnCall(true);
               currentCallRef.current = call;
               break;
