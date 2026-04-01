@@ -82,9 +82,13 @@ ${repFilter}
 RULES:
 - Always exclude DND: (dnd IS NULL OR dnd = '' OR dnd = 'false')
 - Always require phone: phone IS NOT NULL AND phone != ''
-- For revenue comparisons, use: CAST(REGEXP_REPLACE(REPLACE(REPLACE(monthly_revenue, '$', ''), ',', ''), '[^0-9.]', '', 'g') AS NUMERIC)
-- Wrap revenue CAST in a CASE WHEN to handle non-numeric values
-- Use ILIKE for text matching (case insensitive)
+- ALWAYS use ILIKE with wildcards for text matching: industry_dropdown ILIKE '%construction%' (NOT = 'construction')
+- Industry values are verbose like "Construction, Contractors & Trades" or "Transportation & Logistics" — use ILIKE '%keyword%'
+- For tags, use: tags ILIKE '%keyword%' (tags is a comma-separated TEXT field)
+- For state, search both state column AND tags: (state ILIKE '%CA%' OR tags ILIKE '%cali%')
+- monthly_revenue formats vary wildly: "639596", "$35,000", "37k", "10k-30k", "$50-55k". For "has revenue" just check: monthly_revenue IS NOT NULL AND monthly_revenue != ''
+- For revenue comparisons (over $X), DON'T try to CAST — instead use a simple approach: monthly_revenue IS NOT NULL AND monthly_revenue != '' (the data is too inconsistent for reliable numeric comparison)
+- For credit score, use ILIKE: personal_credit_score_range ILIKE '%700%'
 - Return ONLY a JSON object with two fields:
   - "where": the WHERE clause (without the word WHERE)
   - "description": a brief human-readable description of what the query finds
