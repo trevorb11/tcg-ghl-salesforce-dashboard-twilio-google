@@ -2,18 +2,10 @@
 // Salesforce Write-Back — sync call data to SF after each call
 // ============================================================
 
+import { DISPOSITION_LABELS } from "./types";
+
 const SF_INSTANCE_URL = process.env.SF_INSTANCE_URL || "";
 const SF_ACCESS_TOKEN = process.env.SF_ACCESS_TOKEN || "";
-
-const DISPOSITION_LABELS: Record<string, string> = {
-  interested: "Interested",
-  callback: "Callback Requested",
-  not_interested: "Not Interested",
-  no_answer: "No Answer",
-  voicemail: "Left Voicemail",
-  wrong_number: "Wrong Number",
-  disconnected: "Disconnected",
-};
 
 async function sfApi(path: string, method: string, body?: unknown): Promise<unknown> {
   if (!SF_INSTANCE_URL || !SF_ACCESS_TOKEN) return null;

@@ -2,7 +2,7 @@
 // Syncs to: GHL (note), Salesforce (Task + field update), dialer_contacts DB
 
 import { NextRequest, NextResponse } from "next/server";
-import { type Disposition } from "@/lib/types";
+import { type Disposition, DISPOSITION_LABELS } from "@/lib/types";
 import { getSession, saveSession } from "@/lib/session-store";
 import { addContactNote } from "@/lib/ghl";
 import { syncCallToSalesforce } from "@/lib/salesforce";
@@ -13,16 +13,6 @@ const VALID_DISPOSITIONS: Disposition[] = [
   "interested", "callback", "not_interested", "no_answer",
   "voicemail", "wrong_number", "disconnected",
 ];
-
-const DISPOSITION_LABELS: Record<string, string> = {
-  interested: "Interested",
-  callback: "Callback Requested",
-  not_interested: "Not Interested",
-  no_answer: "No Answer",
-  voicemail: "Left Voicemail",
-  wrong_number: "Wrong Number",
-  disconnected: "Disconnected",
-};
 
 export async function POST(req: NextRequest) {
   const authError = requireAuth(req);
@@ -151,8 +141,8 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Don't await — let syncs happen in background
-  Promise.allSettled(syncPromises);
+  // Await all syncs — DB update is critical, GHL/SF are fast HTTP calls
+  await Promise.allSettled(syncPromises);
 
   await saveSession(session);
   return NextResponse.json({

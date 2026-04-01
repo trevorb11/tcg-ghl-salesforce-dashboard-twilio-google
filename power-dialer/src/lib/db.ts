@@ -3,19 +3,25 @@
 // ============================================================
 
 import type { Lead } from "./types";
+import pg from "pg";
+const { Pool } = pg;
 
 const DB_URL = process.env.NEON_DATABASE_URL || process.env.DATABASE_URL || "";
 
-async function query(sql: string, params: unknown[] = []) {
-  const { Client } = await import("pg");
-  const client = new Client({ connectionString: DB_URL });
-  await client.connect();
-  try {
-    const result = await client.query(sql, params);
-    return result;
-  } finally {
-    await client.end();
+let _pool: InstanceType<typeof Pool> | null = null;
+
+function getPool() {
+  if (!_pool && DB_URL) {
+    _pool = new Pool({ connectionString: DB_URL, max: 5 });
+    _pool.on("error", (err) => console.error("[DB Pool] Error:", err.message));
   }
+  return _pool;
+}
+
+async function query(sql: string, params: unknown[] = []) {
+  const pool = getPool();
+  if (!pool) throw new Error("Database not configured");
+  return pool.query(sql, params);
 }
 
 // Map stage keys to ALL matching opp_stage_selection values in DB
@@ -314,7 +320,8 @@ export async function getLeadsByCriteria(filters: LeadFilter): Promise<Lead[]> {
     if (states.length > 0) {
       const stateConditions = states.map(s => {
         params.push(`%${s}%`);
-        return `(state ILIKE $${paramIdx++} OR tags ILIKE $${paramIdx - 1})`;
+        const idx = paramIdx++;
+        return `(state ILIKE $${idx} OR tags ILIKE $${idx})`;
       });
       conditions.push(`(${stateConditions.join(" OR ")})`);
     }

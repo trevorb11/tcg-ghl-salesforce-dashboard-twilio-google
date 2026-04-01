@@ -327,6 +327,7 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
 
   async function endSession() {
     if (!sessionId) return;
+    if (autoAdvanceTimerRef.current) { clearTimeout(autoAdvanceTimerRef.current); autoAdvanceTimerRef.current = null; }
     try { await apiFetch("/api/dialer/end", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessionId }) }); } catch { /* best effort */ }
     webrtc.disconnect(); audioRef.current?.pause(); audioRef.current = null; setPlayingRecordingId(null); setStatus("ended");
   }

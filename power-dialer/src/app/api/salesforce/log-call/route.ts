@@ -4,8 +4,9 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
+import { DISPOSITION_LABELS } from "@/lib/types";
 
-const SF_INSTANCE_URL = process.env.SF_INSTANCE_URL || "https://customization-data-47--dev.sandbox.my.salesforce.com";
+const SF_INSTANCE_URL = process.env.SF_INSTANCE_URL || "";
 const SF_ACCESS_TOKEN = process.env.SF_ACCESS_TOKEN || "";
 
 export async function POST(req: NextRequest) {
@@ -18,16 +19,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Salesforce not configured (missing SF_ACCESS_TOKEN)" }, { status: 500 });
   }
 
-  const dispMap: Record<string, string> = {
-    interested: "Interested",
-    callback: "Callback Requested",
-    not_interested: "Not Interested",
-    no_answer: "No Answer",
-    voicemail: "Left Voicemail",
-    wrong_number: "Wrong Number",
-    disconnected: "Disconnected",
-  };
-  const dispLabel = dispMap[disposition] || disposition;
+  const dispLabel = DISPOSITION_LABELS[disposition] || disposition;
 
   const task = {
     Subject: `Outbound Call${contactId ? "" : ` - ${phone}`}`,

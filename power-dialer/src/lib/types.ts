@@ -90,6 +90,16 @@ export interface CallRecord {
   endedAt?: string;
 }
 
+export const DISPOSITION_LABELS: Record<string, string> = {
+  interested: "Interested",
+  callback: "Callback Requested",
+  not_interested: "Not Interested",
+  no_answer: "No Answer",
+  voicemail: "Left Voicemail",
+  wrong_number: "Wrong Number",
+  disconnected: "Disconnected",
+};
+
 export type DialMode = "single" | "multi";
 
 // Tracks a batch of parallel outbound calls (multi-line mode)

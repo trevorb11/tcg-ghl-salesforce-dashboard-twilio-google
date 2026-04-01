@@ -38,6 +38,7 @@ Key columns (use these for filtering):
 - sf_opp_stage TEXT — Salesforce stage like "Application & Docs", "Underwriting"
 - sf_lead_id TEXT — Salesforce Lead ID
 - sf_contact_id TEXT — Salesforce Contact ID
+- revenue_numeric INTEGER — pre-parsed monthly revenue as integer (30000, 50000, etc.) — USE THIS for revenue comparisons
 
 IMPORTANT format notes:
 - monthly_revenue is TEXT with inconsistent formats: "$117,098", "$35K", "35000", "$25,000 - $50,000", "$50k+", etc.
@@ -86,8 +87,10 @@ RULES:
 - Industry values are verbose like "Construction, Contractors & Trades" or "Transportation & Logistics" — use ILIKE '%keyword%'
 - For tags, use: tags ILIKE '%keyword%' (tags is a comma-separated TEXT field)
 - For state, search both state column AND tags: (state ILIKE '%CA%' OR tags ILIKE '%cali%')
-- monthly_revenue formats vary wildly: "639596", "$35,000", "37k", "10k-30k", "$50-55k". For "has revenue" just check: monthly_revenue IS NOT NULL AND monthly_revenue != ''
-- For revenue comparisons (over $X), DON'T try to CAST — instead use a simple approach: monthly_revenue IS NOT NULL AND monthly_revenue != '' (the data is too inconsistent for reliable numeric comparison)
+- monthly_revenue is TEXT with inconsistent formats, BUT there is a pre-parsed column: revenue_numeric INTEGER
+- For "has revenue": revenue_numeric IS NOT NULL
+- For revenue comparisons: use revenue_numeric directly. Example: revenue_numeric > 30000 (for "over $30k"), revenue_numeric BETWEEN 50000 AND 100000 (for "$50k-$100k")
+- Always convert K to thousands: "30k" = 30000, "100k" = 100000, "$50k" = 50000
 - For credit score, use ILIKE: personal_credit_score_range ILIKE '%700%'
 - Return ONLY a JSON object with two fields:
   - "where": the WHERE clause (without the word WHERE)
