@@ -120,9 +120,11 @@ Return ONLY valid JSON, nothing else.`,
     throw new Error("AI returned empty WHERE clause");
   }
 
-  // Safety check — prevent destructive queries
+  // Safety check — prevent destructive queries (match SQL keywords as statements, not substrings)
   const whereLower = parsed.where.toLowerCase();
-  if (whereLower.includes("drop") || whereLower.includes("delete") || whereLower.includes("update") || whereLower.includes("insert") || whereLower.includes(";")) {
+  if (/\b(drop|delete|truncate|alter)\b/i.test(whereLower) ||
+      /\b(insert\s+into|update\s+\w+\s+set)\b/i.test(whereLower) ||
+      whereLower.includes(";")) {
     throw new Error("Invalid query detected");
   }
 

@@ -39,6 +39,7 @@ export async function GET(req: NextRequest) {
         leads,
         count: leads.length,
         query: q,
+        aiError: message,
         description: "Fallback search (AI unavailable)",
         source: "fallback",
       });
