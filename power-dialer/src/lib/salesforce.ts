@@ -90,9 +90,18 @@ export async function updateContactDisposition(
   const dispLabel = DISPOSITION_LABELS[disposition] || disposition;
 
   try {
+    // First get current dial attempts to increment
+    let currentAttempts = 0;
+    try {
+      const current = await sfApi(`/sobjects/Contact/${sfContactId}?fields=Dial_Attempts__c`, "GET") as Record<string, unknown> | null;
+      currentAttempts = (current?.Dial_Attempts__c as number) || 0;
+    } catch { /* field may not exist yet */ }
+
     const fields: Record<string, unknown> = {
       Call_Disposition__c: dispLabel,
       Last_Contacted__c: new Date().toISOString().split("T")[0],
+      Dial_Attempts__c: currentAttempts + 1,
+      Last_Called_Date__c: new Date().toISOString(),
     };
     if (callbackDate) {
       fields.Follow_up_Date__c = callbackDate;
@@ -116,8 +125,17 @@ export async function updateLeadDisposition(
   if (!SF_ACCESS_TOKEN || !sfLeadId) return false;
 
   try {
+    // Get current dial attempts to increment
+    let currentAttempts = 0;
+    try {
+      const current = await sfApi(`/sobjects/Lead/${sfLeadId}?fields=Dial_Attempts__c`, "GET") as Record<string, unknown> | null;
+      currentAttempts = (current?.Dial_Attempts__c as number) || 0;
+    } catch { /* field may not exist yet */ }
+
     const fields: Record<string, unknown> = {
       Last_Contacted__c: new Date().toISOString().split("T")[0],
+      Dial_Attempts__c: currentAttempts + 1,
+      Last_Called_Date__c: new Date().toISOString(),
     };
     if (callbackDate) {
       fields.Follow_Up_Date__c = callbackDate;
@@ -134,6 +152,36 @@ export async function updateLeadDisposition(
  * Full post-call sync to Salesforce
  * Creates a Task and updates the Contact/Lead disposition
  */
+/**
+ * Update an Opportunity's dial attempts and last called date
+ */
+export async function updateOppDialAttempts(sfOppId: string): Promise<boolean> {
+  if (!SF_ACCESS_TOKEN || !sfOppId) return false;
+
+  try {
+    let currentAttempts = 0;
+    try {
+      const current = await sfApi(`/sobjects/Opportunity/${sfOppId}?fields=Activity_Counter__c`, "GET") as Record<string, unknown> | null;
+      currentAttempts = (current?.Activity_Counter__c as number) || 0;
+    } catch { /* field may not exist */ }
+
+    const fields: Record<string, unknown> = {
+      Activity_Counter__c: currentAttempts + 1,
+    };
+
+    // Try to set Last_Called_Date__c if it exists on Opportunity
+    try {
+      fields.Last_Called_Date__c = new Date().toISOString();
+    } catch { /* field may not exist yet */ }
+
+    await sfApi(`/sobjects/Opportunity/${sfOppId}`, "PATCH", fields);
+    return true;
+  } catch (err) {
+    console.error("[SF] Opportunity dial update failed:", err);
+    return false;
+  }
+}
+
 export async function syncCallToSalesforce(params: {
   sfContactId?: string;
   sfLeadId?: string;
@@ -145,8 +193,8 @@ export async function syncCallToSalesforce(params: {
   leadName?: string;
   businessName?: string;
   callbackDate?: string;
-}): Promise<{ taskId: string | null; contactUpdated: boolean; leadUpdated: boolean }> {
-  const [taskId, contactUpdated, leadUpdated] = await Promise.all([
+}): Promise<{ taskId: string | null; contactUpdated: boolean; leadUpdated: boolean; oppUpdated: boolean }> {
+  const [taskId, contactUpdated, leadUpdated, oppUpdated] = await Promise.all([
     createCallTask({
       contactId: params.sfContactId,
       leadId: params.sfLeadId,
@@ -164,9 +212,12 @@ export async function syncCallToSalesforce(params: {
     params.sfLeadId
       ? updateLeadDisposition(params.sfLeadId, params.disposition, params.callbackDate)
       : Promise.resolve(false),
+    params.sfOpportunityId
+      ? updateOppDialAttempts(params.sfOpportunityId)
+      : Promise.resolve(false),
   ]);
 
-  return { taskId, contactUpdated, leadUpdated };
+  return { taskId, contactUpdated, leadUpdated, oppUpdated };
 }
 
 export function isSalesforceConfigured(): boolean {
