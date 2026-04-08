@@ -236,6 +236,9 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
       const lead = leads[idx];
       webrtcLeadIndexRef.current = idx + 1;
       setCurrentLead(lead); setPosition(idx + 1); setStatus("dialing"); setDialingLeads([]);
+      // Defensive: hang up any lingering call before starting a new one.
+      // Prevents call overlap if the previous call wasn't cleanly torn down.
+      webrtc.hangupCall();
       webrtc.makeCall(lead.phone);
       apiFetch("/api/dialer/next", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessionId, webrtcDial: true, leadIndex: idx }) }).catch(() => {});
       return;
@@ -253,6 +256,25 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
     } catch (err: unknown) { setError(err instanceof Error ? err.message : "Failed to dial"); }
   }
 
+  // Hang up the current call without setting a disposition.
+  // Transitions to wrap_up so the rep can pick a disposition next.
+  function endCall() {
+    if (autoAdvanceTimerRef.current) { clearTimeout(autoAdvanceTimerRef.current); autoAdvanceTimerRef.current = null; }
+    if (connectionMode === "webrtc") {
+      webrtc.hangupCall();
+    } else if (sessionId) {
+      // Server-side: hang up the current lead's leg in the conference
+      apiFetch("/api/dialer/end-call", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId }),
+      }).catch(() => { /* best-effort */ });
+    }
+    if (timerRef.current) clearInterval(timerRef.current);
+    setLastCallDuration(callTimer);
+    setStatus("wrap_up");
+  }
+
   async function handleDisposition(disposition: Disposition) {
     if (!sessionId) return;
 
@@ -260,6 +282,13 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
     if (disposition === "callback" && !callbackDate) {
       setShowCallbackPicker(true);
       return;
+    }
+
+    // Hang up the current call BEFORE recording the disposition.
+    // Prevents the previous call from overlapping with the auto-dialed next call
+    // (e.g. voicemail audio bleeding into the next ring).
+    if (connectionMode === "webrtc") {
+      webrtc.hangupCall();
     }
 
     try {
@@ -273,10 +302,11 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
       if (!res.ok) throw new Error(data.error);
       setNotes(""); setLastAnalysis(null); setShowCallbackPicker(false); setCallbackDate("");
 
-      // Auto-advance: dial next after a short pause
+      // Auto-advance: dial next after a longer pause (1500ms) to give
+      // the previous call's audio buffer time to fully clear.
       if (autoAdvance) {
         setStatus("connecting_rep");
-        autoAdvanceTimerRef.current = setTimeout(() => dialNext(), 800);
+        autoAdvanceTimerRef.current = setTimeout(() => dialNext(), 1500);
       } else {
         setStatus("connecting_rep");
       }
@@ -633,6 +663,7 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
                     <button onClick={webrtc.toggleMute} className={`px-3 py-1.5 text-xs rounded-lg ${webrtc.isMuted ? "bg-red-600 text-white" : "bg-gray-700 text-gray-300"}`}>{webrtc.isMuted ? "Unmute" : "Mute"}</button>
                   )}
                   <button onClick={dropVoicemail} disabled={droppingVoicemail} className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs rounded-lg">{droppingVoicemail ? "Dropping..." : "Drop VM"}</button>
+                  <button onClick={endCall} className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold rounded-lg">End Call</button>
                 </div>
               )}
             </div>

@@ -8,6 +8,7 @@ import { addContactNote } from "@/lib/ghl";
 import { syncCallToSalesforce } from "@/lib/salesforce";
 import { query } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
+import { getClient } from "@/lib/carrier";
 
 const VALID_DISPOSITIONS: Disposition[] = [
   "interested", "callback", "not_interested", "no_answer",
@@ -46,6 +47,22 @@ export async function POST(req: NextRequest) {
   lastCall.disposition = disposition;
   lastCall.notes = notes;
   session.status = "wrap_up";
+
+  // Terminate the previous lead's call leg if it's still active.
+  // Prevents call overlap when the rep dispositions a voicemail and
+  // auto-advance dials the next lead — without this, the previous lead
+  // (still on voicemail) stays in the conference and bleeds into the next call.
+  // Only applies to phone/conference mode (Twilio CallSid present).
+  // WebRTC calls are hung up client-side before disposition is sent.
+  if (lastCall.twilioCallSid && session.connectionMode !== "webrtc") {
+    try {
+      const client = getClient();
+      await client.calls(lastCall.twilioCallSid).update({ status: "completed" });
+    } catch (err) {
+      // Best-effort — call may have already ended naturally
+      console.log("[Disposition] Call already ended or hangup failed:", (err as Error).message);
+    }
+  }
 
   const dispLabel = DISPOSITION_LABELS[disposition] || disposition;
   const dateStr = new Date().toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" });
