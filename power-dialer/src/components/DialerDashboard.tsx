@@ -72,6 +72,10 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
   // Feature toggles
   const [autoAdvance, setAutoAdvance] = useState(true);
   const autoAdvanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // In-flight guard: true while dialNext() is executing, OR while the
+  // auto-advance setTimeout is pending. Prevents double-dials from a rep
+  // clicking Dial Next during the 1500ms auto-advance window.
+  const [dialInFlight, setDialInFlight] = useState(false);
 
   // Callback date picker
   const [showCallbackPicker, setShowCallbackPicker] = useState(false);
@@ -116,7 +120,12 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
       const res = await apiFetch(`/api/dialer/status?sessionId=${sessionId}`);
       if (!res.ok) return;
       const data = await res.json();
-      if (status !== "paused") setStatus(data.status);
+      // Guard against the backend reverting the rep's view after an optimistic
+      // transition. Once the frontend has moved forward to wrap_up/ended, a
+      // slow Twilio webhook should not drag us back to on_call/dialing.
+      const forwardOnly = (status === "wrap_up" || status === "ended") &&
+        (data.status === "on_call" || data.status === "dialing");
+      if (status !== "paused" && !forwardOnly) setStatus(data.status);
       setCallLog(data.callLog || []);
       if (data.currentLead) setCurrentLead(data.currentLead);
       if (data.dialMode) setDialMode(data.dialMode);
@@ -129,7 +138,10 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
 
   useEffect(() => {
     if (sessionId && status !== "ended" && status !== "idle" && status !== "paused") {
-      pollRef.current = setInterval(pollStatus, 2000);
+      // Poll faster during on_call so we catch merchant-initiated hangups
+      // (Twilio webhook → backend status="wrap_up") within ~1s instead of 2s.
+      const interval = status === "on_call" ? 1000 : 2000;
+      pollRef.current = setInterval(pollStatus, interval);
       return () => { if (pollRef.current) clearInterval(pollRef.current); };
     }
   }, [sessionId, status, pollStatus]);
@@ -226,13 +238,17 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
 
   async function dialNext() {
     if (!sessionId) return;
+    // Guard: bail out if a dial is already in flight (prevents double-dial
+    // from rep clicking during auto-advance window or spamming the button).
+    if (dialInFlight && status !== "connecting_rep" && status !== "wrap_up") return;
+    setDialInFlight(true);
     setError(""); setNotes(""); setCallTimer(0); setLastAnalysis(null); setDroppingVoicemail(false);
     if (autoAdvanceTimerRef.current) { clearTimeout(autoAdvanceTimerRef.current); autoAdvanceTimerRef.current = null; }
 
     // WebRTC: browser dials directly
     if (connectionMode === "webrtc" && webrtc.isConnected) {
       const idx = webrtcLeadIndexRef.current;
-      if (idx >= leads.length) { setStatus("ended"); return; }
+      if (idx >= leads.length) { setStatus("ended"); setDialInFlight(false); return; }
       const lead = leads[idx];
       webrtcLeadIndexRef.current = idx + 1;
       setCurrentLead(lead); setPosition(idx + 1); setStatus("dialing"); setDialingLeads([]);
@@ -241,6 +257,7 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
       webrtc.hangupCall();
       webrtc.makeCall(lead.phone);
       apiFetch("/api/dialer/next", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessionId, webrtcDial: true, leadIndex: idx }) }).catch(() => {});
+      setDialInFlight(false);
       return;
     }
 
@@ -254,6 +271,7 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
       if (data.lead) setCurrentLead(data.lead);
       setPosition(data.position); setStatus("dialing");
     } catch (err: unknown) { setError(err instanceof Error ? err.message : "Failed to dial"); }
+    finally { setDialInFlight(false); }
   }
 
   // Hang up the current call without setting a disposition.
@@ -306,7 +324,11 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
       // the previous call's audio buffer time to fully clear.
       if (autoAdvance) {
         setStatus("connecting_rep");
-        autoAdvanceTimerRef.current = setTimeout(() => dialNext(), 1500);
+        setDialInFlight(true); // block manual Dial Next clicks during the window
+        autoAdvanceTimerRef.current = setTimeout(() => {
+          setDialInFlight(false); // dialNext() will re-set it immediately
+          dialNext();
+        }, 1500);
       } else {
         setStatus("connecting_rep");
       }
@@ -590,9 +612,14 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
                     <div className="text-right">
                       <p className="text-xs text-gray-500">{position}/{totalLeads}</p>
                       {(status === "on_call" || status === "wrap_up") && (
-                        <p className={`text-2xl font-mono mt-1 ${status === "on_call" ? "text-green-400" : "text-gray-500"}`}>
-                          {fmt(status === "on_call" ? callTimer : lastCallDuration)}
-                        </p>
+                        <>
+                          {status === "wrap_up" && (
+                            <p className="text-[10px] uppercase tracking-wider text-gray-600 mt-1">Last Call</p>
+                          )}
+                          <p className={`text-2xl font-mono ${status === "on_call" ? "text-green-400 mt-1" : "text-gray-500"}`}>
+                            {fmt(status === "on_call" ? callTimer : lastCallDuration)}
+                          </p>
+                        </>
                       )}
                     </div>
                   </div>
@@ -617,8 +644,14 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
               {/* Dial Next / Skip buttons — always available during connecting_rep and wrap_up */}
               {(status === "connecting_rep" || status === "wrap_up") && (
                 <div className="flex gap-2">
-                  <button onClick={dialNext} className="flex-1 py-3 bg-green-600 hover:bg-green-700 text-white text-lg font-bold rounded-xl">
-                    Dial Next <span className="text-green-300 text-sm ml-1">(Space)</span>
+                  <button
+                    onClick={dialNext}
+                    disabled={dialInFlight}
+                    className="flex-1 py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-700 disabled:text-gray-400 disabled:cursor-not-allowed text-white text-lg font-bold rounded-xl"
+                  >
+                    {dialInFlight && autoAdvance && status === "connecting_rep"
+                      ? "Dialing next…"
+                      : <>Dial Next <span className="text-green-300 text-sm ml-1">(Space)</span></>}
                   </button>
                   {nextLead && (
                     <button onClick={skipLead} className="px-4 py-3 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-xl text-sm font-medium">
