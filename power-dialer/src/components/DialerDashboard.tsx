@@ -453,7 +453,7 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
 
           {/* End session */}
           {status !== "ended" && status !== "idle" && (
-            <button onClick={endSession} className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs rounded-lg">End</button>
+            <button onClick={endSession} className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs rounded-lg">End Session</button>
           )}
           {status === "ended" && (
             <button onClick={onEnd} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-lg">New Session</button>
@@ -604,11 +604,21 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
                 </div>
               )}
 
-              {/* Dial Next / Skip buttons */}
-              {(status === "connecting_rep" || (status === "wrap_up" && !autoAdvance)) && (
+              {/* Call Ended banner — shown whenever we enter wrap_up so reps
+                  immediately know the merchant hung up (or the call otherwise ended) */}
+              {status === "wrap_up" && (
+                <div className="mb-3 p-3 bg-gray-800/60 border border-gray-700 rounded-lg flex items-center justify-center gap-2">
+                  <span className="text-gray-400 text-lg">📞</span>
+                  <span className="text-gray-200 font-semibold">Call Ended</span>
+                  <span className="text-gray-500 text-sm">— pick a disposition or dial next</span>
+                </div>
+              )}
+
+              {/* Dial Next / Skip buttons — always available during connecting_rep and wrap_up */}
+              {(status === "connecting_rep" || status === "wrap_up") && (
                 <div className="flex gap-2">
                   <button onClick={dialNext} className="flex-1 py-3 bg-green-600 hover:bg-green-700 text-white text-lg font-bold rounded-xl">
-                    Dial Next {!autoAdvance && <span className="text-green-300 text-sm ml-1">(Space)</span>}
+                    Dial Next <span className="text-green-300 text-sm ml-1">(Space)</span>
                   </button>
                   {nextLead && (
                     <button onClick={skipLead} className="px-4 py-3 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-xl text-sm font-medium">
@@ -618,10 +628,10 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
                 </div>
               )}
 
-              {/* Auto-advancing indicator */}
+              {/* Auto-advancing hint */}
               {status === "wrap_up" && autoAdvance && (
                 <div className="text-center py-2">
-                  <p className="text-gray-500 text-sm">Auto-dialing next lead after disposition...</p>
+                  <p className="text-gray-500 text-xs">Auto-dialing next lead after disposition...</p>
                 </div>
               )}
 
@@ -656,14 +666,21 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
 
               {/* On Call */}
               {status === "on_call" && (
-                <div className="flex items-center justify-center gap-3 py-3">
-                  <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse" />
-                  <span className="text-green-400 font-medium">Live{dialMode === "multi" && currentLead ? ` with ${currentLead.name}` : ""}</span>
-                  {connectionMode === "webrtc" && (
-                    <button onClick={webrtc.toggleMute} className={`px-3 py-1.5 text-xs rounded-lg ${webrtc.isMuted ? "bg-red-600 text-white" : "bg-gray-700 text-gray-300"}`}>{webrtc.isMuted ? "Unmute" : "Mute"}</button>
-                  )}
-                  <button onClick={dropVoicemail} disabled={droppingVoicemail} className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs rounded-lg">{droppingVoicemail ? "Dropping..." : "Drop VM"}</button>
-                  <button onClick={endCall} className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold rounded-lg">End Call</button>
+                <div className="py-2 space-y-3">
+                  {/* Live status + secondary controls */}
+                  <div className="flex items-center justify-center gap-3">
+                    <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse" />
+                    <span className="text-green-400 font-medium">Live{dialMode === "multi" && currentLead ? ` with ${currentLead.name}` : ""}</span>
+                    {connectionMode === "webrtc" && (
+                      <button onClick={webrtc.toggleMute} className={`px-3 py-1.5 text-xs rounded-lg ${webrtc.isMuted ? "bg-red-600 text-white" : "bg-gray-700 text-gray-300"}`}>{webrtc.isMuted ? "Unmute" : "Mute"}</button>
+                    )}
+                    <button onClick={dropVoicemail} disabled={droppingVoicemail} className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs rounded-lg">{droppingVoicemail ? "Dropping..." : "Drop VM"}</button>
+                  </div>
+                  {/* Prominent End Call button — full width so reps can't miss it */}
+                  <button onClick={endCall} className="w-full py-3 bg-red-600 hover:bg-red-700 text-white text-base font-bold rounded-xl flex items-center justify-center gap-2 shadow-lg">
+                    <span className="text-lg">📵</span>
+                    End Call
+                  </button>
                 </div>
               )}
             </div>
