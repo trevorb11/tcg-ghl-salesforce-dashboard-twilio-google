@@ -101,6 +101,13 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
   const [showUndoToast, setShowUndoToast] = useState(false);
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Session clock — total time since session started
+  const [sessionTimer, setSessionTimer] = useState(0);
+  const sessionTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Disposition flash feedback
+  const [dispoFlash, setDispoFlash] = useState(false);
+
   // ── Live session stats ─────────────────────────────────
   const stats = {
     calls: callLog.length,
@@ -145,6 +152,18 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
       return () => { if (pollRef.current) clearInterval(pollRef.current); };
     }
   }, [sessionId, status, pollStatus]);
+
+  // ── Session clock (total time since session started) ────
+  useEffect(() => {
+    if (sessionId && status !== "idle" && status !== "ended") {
+      if (!sessionTimerRef.current) {
+        sessionTimerRef.current = setInterval(() => setSessionTimer(t => t + 1), 1000);
+      }
+    } else {
+      if (sessionTimerRef.current) { clearInterval(sessionTimerRef.current); sessionTimerRef.current = null; }
+    }
+    return () => { if (sessionTimerRef.current) { clearInterval(sessionTimerRef.current); sessionTimerRef.current = null; } };
+  }, [sessionId, status]);
 
   // ── Call timer (persists into wrap_up) ─────────────────
   useEffect(() => {
@@ -229,6 +248,7 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setSessionId(data.sessionId);
+      setSessionTimer(0);
       setStatus("connecting_rep");
       if (connectionMode === "webrtc" && data.webrtc) {
         webrtc.connect({ ...data.webrtc, callerNumber: data.callerNumber || "" });
@@ -319,6 +339,8 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setNotes(""); setLastAnalysis(null); setShowCallbackPicker(false); setCallbackDate("");
+      // Flash green to confirm disposition was recorded
+      setDispoFlash(true); setTimeout(() => setDispoFlash(false), 600);
 
       // Auto-advance: dial next after a longer pause (1500ms) to give
       // the previous call's audio buffer time to fully clear.
@@ -417,6 +439,19 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
   // ── RENDER ─────────────────────────────────────────────
   return (
     <div className="max-w-7xl mx-auto p-4 sm:p-6">
+      {/* ── Progress bar ─────────────────────────────────── */}
+      {sessionId && status !== "idle" && status !== "ended" && totalLeads > 0 && (
+        <div className="mb-3">
+          <div className="h-1 bg-gray-800 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-blue-600 to-green-500 rounded-full transition-all duration-500 ease-out"
+              style={{ width: `${Math.min((position / totalLeads) * 100, 100)}%` }}
+            />
+          </div>
+          <p className="text-[10px] text-gray-600 mt-0.5 text-right">{position} of {totalLeads} leads</p>
+        </div>
+      )}
+
       {/* ── Header with live stats ──────────────────────── */}
       <div className="flex items-center justify-between mb-4">
         <div>
@@ -427,7 +462,9 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
             <span className="text-gray-500">{stats.calls} calls</span>
             <span className="text-green-500">{stats.connected} connects</span>
             <span className="text-green-400">{stats.interested} interested</span>
-            <span className="text-gray-600">{position}/{totalLeads}</span>
+            {sessionId && status !== "idle" && status !== "ended" && (
+              <span className="text-gray-600 font-mono text-xs" title="Session duration">{fmt(sessionTimer)}</span>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -686,8 +723,14 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
                     </div>
                   ) : (
                     <div className="text-center">
-                      <div className="w-6 h-6 border-3 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-                      <p className="text-blue-400">Ringing {currentLead?.name}...</p>
+                      <div className="relative w-10 h-10 mx-auto mb-2">
+                        <div className="absolute inset-0 rounded-full bg-blue-500/20 animate-ping" />
+                        <div className="absolute inset-1 rounded-full bg-blue-500/30 animate-pulse" />
+                        <div className="absolute inset-2.5 rounded-full bg-blue-500 flex items-center justify-center">
+                          <span className="text-white text-xs">📞</span>
+                        </div>
+                      </div>
+                      <p className="text-blue-400 font-medium">Ringing {currentLead?.name}...</p>
                     </div>
                   )}
                   <div className="mt-3 flex justify-center gap-2">
@@ -714,7 +757,7 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
 
           {/* ── Disposition + Notes Panel ────────────── */}
           {(status === "wrap_up" || status === "on_call") && (
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+            <div className={`bg-gray-900 border rounded-xl p-5 transition-colors duration-500 ${dispoFlash ? "border-green-500/60 bg-green-900/10" : "border-gray-800"}`}>
               {/* AI analysis */}
               {analyzingCall && (
                 <div className="flex items-center gap-2 mb-3 p-2.5 bg-blue-900/20 border border-blue-800/40 rounded-lg">
@@ -882,7 +925,15 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
             ) : (
               <div className="space-y-1.5 max-h-[700px] overflow-y-auto">
                 {[...callLog].reverse().map(entry => (
-                  <div key={entry.id} className="bg-gray-800/40 rounded-lg px-3 py-2 cursor-pointer hover:bg-gray-800/70" onClick={() => setExpandedCallId(expandedCallId === entry.id ? null : entry.id)}>
+                  <div key={entry.id} className={`bg-gray-800/40 rounded-lg px-3 py-2 cursor-pointer hover:bg-gray-800/70 transition-colors duration-150 border-l-2 ${
+                    entry.disposition === "interested" ? "border-l-green-500" :
+                    entry.disposition === "callback" ? "border-l-blue-500" :
+                    entry.disposition === "not_interested" ? "border-l-orange-500" :
+                    entry.disposition === "voicemail" ? "border-l-purple-500" :
+                    entry.disposition === "wrong_number" ? "border-l-red-500" :
+                    entry.disposition === "disconnected" ? "border-l-red-800" :
+                    "border-l-gray-700"
+                  }`} onClick={() => setExpandedCallId(expandedCallId === entry.id ? null : entry.id)}>
                     <div className="flex items-center justify-between">
                       <span className="font-medium text-sm truncate">{entry.leadName}</span>
                       <DispositionBadge d={entry.disposition} />
