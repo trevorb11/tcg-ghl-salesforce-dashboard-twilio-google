@@ -699,21 +699,14 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
 
               {/* On Call */}
               {status === "on_call" && (
-                <div className="py-2 space-y-3">
-                  {/* Live status + secondary controls */}
-                  <div className="flex items-center justify-center gap-3">
-                    <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse" />
-                    <span className="text-green-400 font-medium">Live{dialMode === "multi" && currentLead ? ` with ${currentLead.name}` : ""}</span>
-                    {connectionMode === "webrtc" && (
-                      <button onClick={webrtc.toggleMute} className={`px-3 py-1.5 text-xs rounded-lg ${webrtc.isMuted ? "bg-red-600 text-white" : "bg-gray-700 text-gray-300"}`}>{webrtc.isMuted ? "Unmute" : "Mute"}</button>
-                    )}
-                    <button onClick={dropVoicemail} disabled={droppingVoicemail} className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs rounded-lg">{droppingVoicemail ? "Dropping..." : "Drop VM"}</button>
-                  </div>
-                  {/* Prominent End Call button — full width so reps can't miss it */}
-                  <button onClick={endCall} className="w-full py-3 bg-red-600 hover:bg-red-700 text-white text-base font-bold rounded-xl flex items-center justify-center gap-2 shadow-lg">
-                    <span className="text-lg">📵</span>
-                    End Call
-                  </button>
+                <div className="flex items-center justify-center gap-3 py-3">
+                  <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse" />
+                  <span className="text-green-400 font-medium">Live{dialMode === "multi" && currentLead ? ` with ${currentLead.name}` : ""}</span>
+                  {connectionMode === "webrtc" && (
+                    <button onClick={webrtc.toggleMute} className={`px-3 py-1.5 text-xs rounded-lg ${webrtc.isMuted ? "bg-red-600 text-white" : "bg-gray-700 text-gray-300"}`}>{webrtc.isMuted ? "Unmute" : "Mute"}</button>
+                  )}
+                  <button onClick={dropVoicemail} disabled={droppingVoicemail} className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs rounded-lg">{droppingVoicemail ? "Dropping..." : "Drop VM"}</button>
+                  <button onClick={endCall} className="px-4 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg">End Call</button>
                 </div>
               )}
             </div>
