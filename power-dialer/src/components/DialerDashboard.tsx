@@ -465,8 +465,8 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
           {sessionId && status !== "idle" && status !== "ended" && (
             <button
               onClick={status === "paused" ? resumeSession : pauseSession}
-              className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-                status === "paused" ? "bg-green-600 hover:bg-green-700 text-white" : "bg-gray-700 hover:bg-gray-600 text-gray-300"
+              className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-150 active:scale-95 ${
+                status === "paused" ? "bg-green-600 hover:bg-green-500 text-white" : "bg-gray-700 hover:bg-gray-600 text-gray-300"
               }`}
             >
               {status === "paused" ? "Resume (P)" : "Pause (P)"}
@@ -475,10 +475,10 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
 
           {/* End session */}
           {status !== "ended" && status !== "idle" && (
-            <button onClick={endSession} className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs rounded-lg">End Session</button>
+            <button onClick={endSession} className="px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white text-xs rounded-lg transition-all duration-150 active:scale-95">End Session</button>
           )}
           {status === "ended" && (
-            <button onClick={onEnd} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-lg">New Session</button>
+            <button onClick={onEnd} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs rounded-lg transition-all duration-150 active:scale-95">New Session</button>
           )}
         </div>
       </div>
@@ -543,7 +543,7 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
               </div>
 
               <div className="text-center">
-                <button onClick={startSession} className="px-8 py-4 bg-green-600 hover:bg-green-700 text-white text-lg font-bold rounded-xl">
+                <button onClick={startSession} className="px-8 py-4 bg-green-600 hover:bg-green-500 hover:shadow-lg hover:shadow-green-600/20 text-white text-lg font-bold rounded-xl transition-all duration-150 active:scale-[0.97]">
                   Start {dialMode === "multi" ? `Multi-Line (${linesCount}x)` : "Dialing"}
                 </button>
               </div>
@@ -647,14 +647,14 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
                   <button
                     onClick={dialNext}
                     disabled={dialInFlight}
-                    className="flex-1 py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-700 disabled:text-gray-400 disabled:cursor-not-allowed text-white text-lg font-bold rounded-xl"
+                    className="flex-1 py-3 bg-green-600 hover:bg-green-500 hover:shadow-lg hover:shadow-green-600/20 disabled:bg-gray-700 disabled:text-gray-400 disabled:cursor-not-allowed disabled:active:scale-100 text-white text-lg font-bold rounded-xl transition-all duration-150 active:scale-[0.97]"
                   >
                     {dialInFlight && autoAdvance && status === "connecting_rep"
                       ? "Dialing next…"
                       : <>Dial Next <span className="text-green-300 text-sm ml-1">(Space)</span></>}
                   </button>
                   {nextLead && (
-                    <button onClick={skipLead} className="px-4 py-3 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-xl text-sm font-medium">
+                    <button onClick={skipLead} className="px-4 py-3 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-xl text-sm font-medium transition-all duration-150 active:scale-95">
                       Skip (S)
                     </button>
                   )}
@@ -691,8 +691,8 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
                     </div>
                   )}
                   <div className="mt-3 flex justify-center gap-2">
-                    <button onClick={skipLead} className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs rounded-lg">Skip (S)</button>
-                    <button onClick={dropVoicemail} disabled={droppingVoicemail} className="px-3 py-1.5 bg-purple-600/70 hover:bg-purple-600 text-white text-xs rounded-lg">{droppingVoicemail ? "Dropping..." : "Drop VM"}</button>
+                    <button onClick={skipLead} className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs rounded-lg transition-all duration-150 active:scale-95">Skip (S)</button>
+                    <button onClick={dropVoicemail} disabled={droppingVoicemail} className="px-3 py-1.5 bg-purple-600/70 hover:bg-purple-600 text-white text-xs rounded-lg transition-all duration-150 active:scale-95 disabled:opacity-60 disabled:active:scale-100">{droppingVoicemail ? "Dropping..." : "Drop VM"}</button>
                   </div>
                 </div>
               )}
@@ -703,10 +703,10 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
                   <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse" />
                   <span className="text-green-400 font-medium">Live{dialMode === "multi" && currentLead ? ` with ${currentLead.name}` : ""}</span>
                   {connectionMode === "webrtc" && (
-                    <button onClick={webrtc.toggleMute} className={`px-3 py-1.5 text-xs rounded-lg ${webrtc.isMuted ? "bg-red-600 text-white" : "bg-gray-700 text-gray-300"}`}>{webrtc.isMuted ? "Unmute" : "Mute"}</button>
+                    <button onClick={webrtc.toggleMute} className={`px-3 py-1.5 text-xs rounded-lg transition-all duration-150 active:scale-95 ${webrtc.isMuted ? "bg-red-600 text-white hover:bg-red-500" : "bg-gray-700 text-gray-300 hover:bg-gray-600"}`}>{webrtc.isMuted ? "Unmute" : "Mute"}</button>
                   )}
-                  <button onClick={dropVoicemail} disabled={droppingVoicemail} className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs rounded-lg">{droppingVoicemail ? "Dropping..." : "Drop VM"}</button>
-                  <button onClick={endCall} className="px-4 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg">End Call</button>
+                  <button onClick={dropVoicemail} disabled={droppingVoicemail} className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 hover:shadow-md text-white text-xs rounded-lg transition-all duration-150 active:scale-95 disabled:opacity-60 disabled:active:scale-100">{droppingVoicemail ? "Dropping..." : "Drop VM"}</button>
+                  <button onClick={endCall} className="px-4 py-1.5 bg-red-600 hover:bg-red-500 hover:shadow-md hover:shadow-red-600/30 text-white text-xs font-bold rounded-lg transition-all duration-150 active:scale-95">End Call</button>
                 </div>
               )}
             </div>
@@ -747,7 +747,7 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
               {/* Disposition buttons with keyboard hints */}
               <div className="grid grid-cols-4 sm:grid-cols-7 gap-1.5 mb-3">
                 {DISPOSITIONS.map(d => (
-                  <button key={d.value} onClick={() => handleDisposition(d.value)} className={`${d.color} hover:opacity-90 text-white text-xs font-medium py-2.5 px-2 rounded-lg transition-opacity text-center`}>
+                  <button key={d.value} onClick={() => handleDisposition(d.value)} className={`${d.color} hover:opacity-90 hover:shadow-md text-white text-xs font-medium py-2.5 px-2 rounded-lg transition-all duration-150 active:scale-95 text-center`}>
                     <span className="block">{d.label}</span>
                     <span className="block text-[10px] opacity-60 mt-0.5">{d.key}</span>
                   </button>
