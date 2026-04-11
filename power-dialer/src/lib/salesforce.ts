@@ -161,8 +161,17 @@ export async function updateOppDialAttempts(sfOppId: string): Promise<boolean> {
   try {
     let currentAttempts = 0;
     try {
-      const current = await sfApi(`/sobjects/Opportunity/${sfOppId}?fields=Activity_Counter__c`, "GET") as Record<string, unknown> | null;
+      const current = await sfApi(`/sobjects/Opportunity/${sfOppId}?fields=Activity_Counter__c,ContactId`, "GET") as Record<string, unknown> | null;
       currentAttempts = (current?.Activity_Counter__c as number) || 0;
+
+      // First call on this Opp: seed from the Contact's Dial_Attempts__c
+      // so the count carries over from the Lead → Contact → Opportunity chain.
+      if (!currentAttempts && current?.ContactId) {
+        try {
+          const contact = await sfApi(`/sobjects/Contact/${current.ContactId}?fields=Dial_Attempts__c`, "GET") as Record<string, unknown> | null;
+          currentAttempts = (contact?.Dial_Attempts__c as number) || 0;
+        } catch { /* Contact may not have Dial_Attempts__c yet */ }
+      }
     } catch { /* field may not exist */ }
 
     const fields: Record<string, unknown> = {
