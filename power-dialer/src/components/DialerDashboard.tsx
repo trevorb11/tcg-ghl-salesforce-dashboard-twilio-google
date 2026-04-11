@@ -108,6 +108,9 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
   // Disposition flash feedback
   const [dispoFlash, setDispoFlash] = useState(false);
 
+  // End Session confirmation
+  const [showEndConfirm, setShowEndConfirm] = useState(false);
+
   // ── Live session stats ─────────────────────────────────
   const stats = {
     calls: callLog.length,
@@ -425,8 +428,14 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
     finally { setLoadingSummary(false); }
   }
 
-  async function endSession() {
+  async function endSession(confirmed = false) {
     if (!sessionId) return;
+    // Require confirmation if there are calls in the log (rep has done work)
+    if (!confirmed && callLog.length > 0) {
+      setShowEndConfirm(true);
+      return;
+    }
+    setShowEndConfirm(false);
     if (autoAdvanceTimerRef.current) { clearTimeout(autoAdvanceTimerRef.current); autoAdvanceTimerRef.current = null; }
     try { await apiFetch("/api/dialer/end", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessionId }) }); } catch { /* best effort */ }
     webrtc.disconnect(); audioRef.current?.pause(); audioRef.current = null; setPlayingRecordingId(null); setStatus("ended");
@@ -512,7 +521,7 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
 
           {/* End session */}
           {status !== "ended" && status !== "idle" && (
-            <button onClick={endSession} className="px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white text-xs rounded-lg transition-all duration-150 active:scale-95">End Session</button>
+            <button onClick={() => endSession()} className="px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white text-xs rounded-lg transition-all duration-150 active:scale-95">End Session</button>
           )}
           {status === "ended" && (
             <button onClick={onEnd} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs rounded-lg transition-all duration-150 active:scale-95">New Session</button>
@@ -981,6 +990,33 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
           )}
         </div>
       </div>
+
+      {/* End Session confirmation modal */}
+      {showEndConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-gray-900 border border-gray-700 rounded-xl p-6 max-w-sm w-full mx-4 shadow-2xl">
+            <h3 className="text-lg font-bold text-white mb-2">End this session?</h3>
+            <p className="text-gray-400 text-sm mb-1">
+              You&apos;ve made <span className="text-white font-medium">{callLog.length} call{callLog.length !== 1 ? "s" : ""}</span> ({stats.interested} interested, {stats.connected} connects).
+            </p>
+            <p className="text-gray-500 text-xs mb-5">This will end your dialing session. You can view your results on the next screen.</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowEndConfirm(false)}
+                className="flex-1 py-2.5 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-medium rounded-lg transition-all duration-150 active:scale-95"
+              >
+                Keep Dialing
+              </button>
+              <button
+                onClick={() => endSession(true)}
+                className="flex-1 py-2.5 bg-red-600 hover:bg-red-500 text-white text-sm font-bold rounded-lg transition-all duration-150 active:scale-95"
+              >
+                End Session
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Skip undo toast */}
       {showUndoToast && skippedLead && (
