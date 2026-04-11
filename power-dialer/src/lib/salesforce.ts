@@ -101,10 +101,9 @@ export async function updateContactDisposition(
       Call_Disposition__c: dispLabel,
       Last_Contacted__c: new Date().toISOString().split("T")[0],
       Dial_Attempts__c: currentAttempts + 1,
-      Last_Called_Date__c: new Date().toISOString(),
     };
     if (callbackDate) {
-      fields.Follow_up_Date__c = callbackDate;
+      fields.Follow_Up_Date__c = callbackDate;
     }
     await sfApi(`/sobjects/Contact/${sfContactId}`, "PATCH", fields);
     return true;
@@ -124,6 +123,8 @@ export async function updateLeadDisposition(
 ): Promise<boolean> {
   if (!SF_ACCESS_TOKEN || !sfLeadId) return false;
 
+  const dispLabel = DISPOSITION_LABELS[disposition] || disposition;
+
   try {
     // Get current dial attempts to increment
     let currentAttempts = 0;
@@ -133,6 +134,7 @@ export async function updateLeadDisposition(
     } catch { /* field may not exist yet */ }
 
     const fields: Record<string, unknown> = {
+      Call_Disposition__c: dispLabel,
       Last_Contacted__c: new Date().toISOString().split("T")[0],
       Dial_Attempts__c: currentAttempts + 1,
       Last_Called_Date__c: new Date().toISOString(),
