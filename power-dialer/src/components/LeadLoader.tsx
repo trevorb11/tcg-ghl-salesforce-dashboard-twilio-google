@@ -247,7 +247,7 @@ export default function LeadLoader({
     setError("");
 
     try {
-      const res = await apiFetch(`/api/leads?stage=${selectedStage}`);
+      const res = await apiFetch(`/api/leads?stage=${selectedStage}&rep=${encodeURIComponent(rep.name)}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 

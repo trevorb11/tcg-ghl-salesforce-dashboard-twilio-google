@@ -12,6 +12,7 @@ export async function GET(req: NextRequest) {
 
   const stage = req.nextUrl.searchParams.get("stage");
   const source = req.nextUrl.searchParams.get("source") || "db";
+  const rep = req.nextUrl.searchParams.get("rep") || undefined;
 
   if (!stage) {
     return NextResponse.json({ error: "stage parameter is required" }, { status: 400 });
@@ -47,8 +48,8 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const leads = await getLeadsFromDb(stage);
-    return NextResponse.json({ leads, count: leads.length, source: "db", stage });
+    const leads = await getLeadsFromDb(stage, rep);
+    return NextResponse.json({ leads, count: leads.length, source: "db", stage, filteredByRep: !!rep });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
     console.error("DB lead fetch error:", message);

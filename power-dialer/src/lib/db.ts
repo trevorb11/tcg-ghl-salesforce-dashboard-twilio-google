@@ -192,18 +192,26 @@ function rowToLead(row: Record<string, string>, fallbackStage?: string): Lead & 
   };
 }
 
-export async function getLeadsFromDb(stageKey: string): Promise<Lead[]> {
+export async function getLeadsFromDb(stageKey: string, assignedTo?: string): Promise<Lead[]> {
   const stageValues = DB_STAGE_MAP[stageKey];
   if (!stageValues) throw new Error(`Unknown stage: ${stageKey}`);
 
+  const params: string[] = [...stageValues];
   const placeholders = stageValues.map((_, i) => `$${i + 1}`).join(", ");
+
+  let assignedClause = "";
+  if (assignedTo) {
+    params.push(assignedTo);
+    assignedClause = ` AND assigned_to = $${params.length}`;
+  }
+
   const result = await query(
     `${LEAD_SELECT}
      WHERE opp_stage_selection IN (${placeholders})
        AND phone IS NOT NULL AND phone != ''
-       AND (dnd IS NULL OR dnd = '' OR dnd = 'false')
+       AND (dnd IS NULL OR dnd = '' OR dnd = 'false')${assignedClause}
      ORDER BY last_contacted ASC NULLS FIRST`,
-    stageValues
+    params
   );
 
   return result.rows.map((row: Record<string, string>) => rowToLead(row, stageKey));
