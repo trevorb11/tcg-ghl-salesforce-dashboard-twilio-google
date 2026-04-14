@@ -157,8 +157,14 @@ export async function updateLeadDisposition(
 /**
  * Update an Opportunity's dial attempts and last called date
  */
-export async function updateOppDialAttempts(sfOppId: string): Promise<boolean> {
+export async function updateOppDialAttempts(
+  sfOppId: string,
+  disposition?: string,
+  callbackDate?: string
+): Promise<boolean> {
   if (!SF_ACCESS_TOKEN || !sfOppId) return false;
+
+  const dispLabel = disposition ? (DISPOSITION_LABELS[disposition] || disposition) : undefined;
 
   try {
     let currentAttempts = 0;
@@ -178,12 +184,15 @@ export async function updateOppDialAttempts(sfOppId: string): Promise<boolean> {
 
     const fields: Record<string, unknown> = {
       Activity_Counter__c: currentAttempts + 1,
+      Last_Called_Date__c: new Date().toISOString(),
+      Last_Contacted__c: new Date().toISOString().split("T")[0],
     };
-
-    // Try to set Last_Called_Date__c if it exists on Opportunity
-    try {
-      fields.Last_Called_Date__c = new Date().toISOString();
-    } catch { /* field may not exist yet */ }
+    if (dispLabel) {
+      fields.Call_Disposition__c = dispLabel;
+    }
+    if (callbackDate) {
+      fields.Follow_Up_Date__c = callbackDate;
+    }
 
     await sfApi(`/sobjects/Opportunity/${sfOppId}`, "PATCH", fields);
     return true;
@@ -224,7 +233,7 @@ export async function syncCallToSalesforce(params: {
       ? updateLeadDisposition(params.sfLeadId, params.disposition, params.callbackDate)
       : Promise.resolve(false),
     params.sfOpportunityId
-      ? updateOppDialAttempts(params.sfOpportunityId)
+      ? updateOppDialAttempts(params.sfOpportunityId, params.disposition, params.callbackDate)
       : Promise.resolve(false),
   ]);
 
