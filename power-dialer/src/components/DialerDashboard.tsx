@@ -70,7 +70,7 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
   const [dialingLeads, setDialingLeads] = useState<{ name: string; businessName: string; phone: string }[]>([]);
 
   // Feature toggles
-  const [autoAdvance, setAutoAdvance] = useState(true);
+  const [autoAdvance, setAutoAdvance] = useState(false);
   const autoAdvanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // In-flight guard: true while dialNext() is executing, OR while the
   // auto-advance setTimeout is pending. Prevents double-dials from a rep
@@ -276,8 +276,10 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
       webrtcLeadIndexRef.current = idx + 1;
       setCurrentLead(lead); setPosition(idx + 1); setStatus("dialing"); setDialingLeads([]);
       // Defensive: hang up any lingering call before starting a new one.
-      // Prevents call overlap if the previous call wasn't cleanly torn down.
+      // Wait 800ms for the SIP BYE to complete before placing the new call —
+      // prevents audio overlap from the old session bleeding into the new one.
       webrtc.hangupCall();
+      await new Promise(resolve => setTimeout(resolve, 800));
       webrtc.makeCall(lead.phone);
       apiFetch("/api/dialer/next", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessionId, webrtcDial: true, leadIndex: idx }) }).catch(() => {});
       setDialInFlight(false);
@@ -345,15 +347,16 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
       // Flash green to confirm disposition was recorded
       setDispoFlash(true); setTimeout(() => setDispoFlash(false), 600);
 
-      // Auto-advance: dial next after a longer pause (1500ms) to give
-      // the previous call's audio buffer time to fully clear.
+      // Auto-advance: dial next after a pause to let the previous call
+      // fully tear down. 2500ms gives Twilio/SignalWire time to release
+      // the call leg so there's no audio bleed into the next call.
       if (autoAdvance) {
         setStatus("connecting_rep");
         setDialInFlight(true); // block manual Dial Next clicks during the window
         autoAdvanceTimerRef.current = setTimeout(() => {
           setDialInFlight(false); // dialNext() will re-set it immediately
           dialNext();
-        }, 1500);
+        }, 2500);
       } else {
         setStatus("connecting_rep");
       }
@@ -503,7 +506,7 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
           {status !== "idle" && status !== "ended" && (
             <label className="flex items-center gap-1.5 cursor-pointer">
               <input type="checkbox" checked={autoAdvance} onChange={e => setAutoAdvance(e.target.checked)} className="accent-green-600 w-3.5 h-3.5" />
-              <span className="text-xs text-gray-500">Auto</span>
+              <span className="text-xs text-gray-500">Auto-Dial</span>
             </label>
           )}
 
@@ -695,8 +698,8 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
                     disabled={dialInFlight}
                     className="flex-1 py-3 bg-green-600 hover:bg-green-500 hover:shadow-lg hover:shadow-green-600/20 disabled:bg-gray-700 disabled:text-gray-400 disabled:cursor-not-allowed disabled:active:scale-100 text-white text-lg font-bold rounded-xl transition-all duration-150 active:scale-[0.97]"
                   >
-                    {dialInFlight && autoAdvance && status === "connecting_rep"
-                      ? "Dialing next…"
+                    {dialInFlight
+                      ? "Preparing next call…"
                       : <>Dial Next <span className="text-green-300 text-sm ml-1">(Space)</span></>}
                   </button>
                   {nextLead && (
