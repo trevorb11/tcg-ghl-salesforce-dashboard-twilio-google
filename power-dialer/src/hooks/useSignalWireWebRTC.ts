@@ -20,6 +20,7 @@ interface UseSignalWireWebRTCReturn {
   makeCall: (phoneNumber: string) => void;
   hangupCall: () => void;
   toggleMute: () => void;
+  sendDTMF: (digit: string) => void;
 }
 
 export function useSignalWireWebRTC(): UseSignalWireWebRTCReturn {
@@ -261,8 +262,14 @@ export function useSignalWireWebRTC(): UseSignalWireWebRTCReturn {
     }
   }, [isMuted]);
 
+  const sendDTMF = useCallback((digit: string) => {
+    if (currentCallRef.current) {
+      try { currentCallRef.current.dtmf(digit); } catch { /* not supported or call ended */ }
+    }
+  }, []);
+
   return {
     isConnected, isOnCall, isMuted, callState, error,
-    connect, disconnect, makeCall, hangupCall, toggleMute,
+    connect, disconnect, makeCall, hangupCall, toggleMute, sendDTMF,
   };
 }

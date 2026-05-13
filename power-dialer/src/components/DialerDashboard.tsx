@@ -111,6 +111,9 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
   // End Session confirmation
   const [showEndConfirm, setShowEndConfirm] = useState(false);
 
+  // Floating DTMF dialpad
+  const [showDialpad, setShowDialpad] = useState(false);
+
   // ── Live session stats ─────────────────────────────────
   const stats = {
     calls: callLog.length,
@@ -994,6 +997,41 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
           )}
         </div>
       </div>
+
+      {/* Floating DTMF dialpad — bottom right */}
+      {sessionId && status !== "idle" && status !== "ended" && (
+        <div className="fixed bottom-4 right-4 z-40">
+          {showDialpad ? (
+            <div className="bg-gray-900 border border-gray-700 rounded-xl shadow-2xl p-3 w-48">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[10px] text-gray-500 uppercase tracking-wider">Dialpad</span>
+                <button onClick={() => setShowDialpad(false)} className="text-gray-500 hover:text-gray-300 text-xs">&times;</button>
+              </div>
+              <div className="grid grid-cols-3 gap-1.5">
+                {["1","2","3","4","5","6","7","8","9","*","0","#"].map(digit => (
+                  <button
+                    key={digit}
+                    onClick={() => {
+                      if (connectionMode === "webrtc") { webrtc.sendDTMF(digit); }
+                    }}
+                    className="py-2.5 bg-gray-800 hover:bg-gray-700 text-white text-sm font-medium rounded-lg transition-all duration-100 active:scale-90 active:bg-gray-600"
+                  >
+                    {digit}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowDialpad(true)}
+              className="w-10 h-10 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-full flex items-center justify-center text-gray-400 hover:text-white shadow-lg transition-all duration-150 active:scale-95"
+              title="Open dialpad"
+            >
+              <span className="text-base">#</span>
+            </button>
+          )}
+        </div>
+      )}
 
       {/* End Session confirmation modal */}
       {showEndConfirm && (
