@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import LoginScreen from "@/components/LoginScreen";
 import LeadLoader from "@/components/LeadLoader";
 import DialerDashboard from "@/components/DialerDashboard";
-import { setApiKey, apiFetch } from "@/lib/api-client";
+import { setApiKey, getApiKey, clearApiKey, apiFetch } from "@/lib/api-client";
 
 interface Rep {
   id: string;
@@ -49,6 +49,23 @@ export default function Home() {
   const [autoSessionId, setAutoSessionId] = useState<string | null>(null);
   const [autoError, setAutoError] = useState<string | null>(null);
   const [dialNumber, setDialNumber] = useState<string | null>(null);
+
+  // Auto-restore session from localStorage so reps stay logged in
+  // across page reloads, iframe navigation, and extension side panel tabs.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const savedRep = localStorage.getItem("tcg_dialer_rep");
+    const savedKey = getApiKey();
+    if (savedRep && savedKey) {
+      try {
+        const parsed = JSON.parse(savedRep) as Rep;
+        setRep(parsed);
+        setScreen("load_leads");
+      } catch {
+        localStorage.removeItem("tcg_dialer_rep");
+      }
+    }
+  }, []);
 
   // Listen for postMessage from the Chrome extension side panel.
   // This lets the extension pass a dial number without reloading the iframe
@@ -150,6 +167,9 @@ export default function Home() {
   function handleLogin(repData: Rep, apiKey: string) {
     setApiKey(apiKey);
     setRep(repData);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("tcg_dialer_rep", JSON.stringify(repData));
+    }
     setScreen("load_leads");
   }
 
@@ -162,6 +182,17 @@ export default function Home() {
     setLeads([]);
     setAutoSessionId(null);
     setScreen("load_leads");
+  }
+
+  function handleLogout() {
+    clearApiKey();
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("tcg_dialer_rep");
+    }
+    setRep(null);
+    setLeads([]);
+    setAutoSessionId(null);
+    setScreen("login");
   }
 
   return (
@@ -190,7 +221,7 @@ export default function Home() {
       )}
 
       {screen === "load_leads" && rep && (
-        <LeadLoader rep={rep} onLeadsLoaded={handleLeadsLoaded} initialDialNumber={dialNumber} />
+        <LeadLoader rep={rep} onLeadsLoaded={handleLeadsLoaded} initialDialNumber={dialNumber} onLogout={handleLogout} />
       )}
 
       {screen === "dialer" && rep && (

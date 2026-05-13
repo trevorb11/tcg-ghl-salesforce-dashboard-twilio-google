@@ -127,10 +127,12 @@ export default function LeadLoader({
   rep,
   onLeadsLoaded,
   initialDialNumber,
+  onLogout,
 }: {
   rep: Rep;
   onLeadsLoaded: (leads: Lead[]) => void;
   initialDialNumber?: string | null;
+  onLogout?: () => void;
 }) {
   const STAGE_GROUPS = rep.role === "admin" ? ADMIN_STAGE_GROUPS : REP_STAGE_GROUPS;
   const [mode, setMode] = useState<LoadMode>(initialDialNumber ? "dialpad" : "pipeline");
@@ -482,6 +484,9 @@ export default function LeadLoader({
           <h1 className="text-3xl font-bold">TCG Power Dialer</h1>
           <p className="text-gray-400 mt-2">
             Welcome back, <span className="text-white font-medium">{rep.name}</span>
+            {onLogout && (
+              <button onClick={onLogout} className="ml-2 text-gray-600 hover:text-gray-400 text-xs transition-colors">(sign out)</button>
+            )}
           </p>
         </div>
 
