@@ -1,23 +1,41 @@
 // ============================================================
 // Salesforce Write-Back — sync call data to SF after each call
 // ============================================================
+// Uses OAuth refresh tokens for persistent auth. If the access
+// token expires (401), it auto-refreshes and retries the request.
+// Falls back to static SF_ACCESS_TOKEN env var if no OAuth tokens
+// are configured (legacy, will eventually expire).
 
 import { DISPOSITION_LABELS } from "./types";
-
-const SF_INSTANCE_URL = process.env.SF_INSTANCE_URL || "";
-const SF_ACCESS_TOKEN = process.env.SF_ACCESS_TOKEN || "";
+import { getValidToken, handleTokenExpiry } from "./sf-auth";
 
 async function sfApi(path: string, method: string, body?: unknown): Promise<unknown> {
-  if (!SF_INSTANCE_URL || !SF_ACCESS_TOKEN) return null;
+  const token = await getValidToken();
+  if (!token) return null;
 
-  const res = await fetch(`${SF_INSTANCE_URL}/services/data/v59.0${path}`, {
-    method,
-    headers: {
-      Authorization: `Bearer ${SF_ACCESS_TOKEN}`,
-      "Content-Type": "application/json",
-    },
-    ...(body ? { body: JSON.stringify(body) } : {}),
-  });
+  async function doRequest(accessToken: string, instanceUrl: string): Promise<Response> {
+    return fetch(`${instanceUrl}/services/data/v59.0${path}`, {
+      method,
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    });
+  }
+
+  let res = await doRequest(token.accessToken, token.instanceUrl);
+
+  // Auto-refresh on 401 (expired token) and retry once
+  if (res.status === 401) {
+    const refreshed = await handleTokenExpiry();
+    if (refreshed) {
+      res = await doRequest(refreshed.accessToken, refreshed.instanceUrl);
+    } else {
+      const errText = await res.text();
+      throw new Error(`SF API ${method} ${path}: 401 (token expired, refresh failed) ${errText}`);
+    }
+  }
 
   if (!res.ok) {
     const errText = await res.text();
@@ -42,7 +60,7 @@ export async function createCallTask(params: {
   leadName?: string;
   businessName?: string;
 }): Promise<string | null> {
-  if (!SF_ACCESS_TOKEN) return null;
+  // Token check handled by sfApi()
 
   const dispLabel = DISPOSITION_LABELS[params.disposition] || params.disposition;
   const whoId = params.contactId || params.leadId || undefined;
@@ -85,7 +103,7 @@ export async function updateContactDisposition(
   disposition: string,
   callbackDate?: string
 ): Promise<boolean> {
-  if (!SF_ACCESS_TOKEN || !sfContactId) return false;
+  if (!sfContactId) return false;
 
   const dispLabel = DISPOSITION_LABELS[disposition] || disposition;
 
@@ -121,7 +139,7 @@ export async function updateLeadDisposition(
   disposition: string,
   callbackDate?: string
 ): Promise<boolean> {
-  if (!SF_ACCESS_TOKEN || !sfLeadId) return false;
+  if (!sfLeadId) return false;
 
   const dispLabel = DISPOSITION_LABELS[disposition] || disposition;
 
@@ -162,7 +180,7 @@ export async function updateOppDialAttempts(
   disposition?: string,
   callbackDate?: string
 ): Promise<boolean> {
-  if (!SF_ACCESS_TOKEN || !sfOppId) return false;
+  if (!sfOppId) return false;
 
   const dispLabel = disposition ? (DISPOSITION_LABELS[disposition] || disposition) : undefined;
 
@@ -240,6 +258,7 @@ export async function syncCallToSalesforce(params: {
   return { taskId, contactUpdated, leadUpdated, oppUpdated };
 }
 
-export function isSalesforceConfigured(): boolean {
-  return !!(SF_INSTANCE_URL && SF_ACCESS_TOKEN);
+export async function isSalesforceConfigured(): Promise<boolean> {
+  const token = await getValidToken();
+  return !!token;
 }

@@ -3,25 +3,37 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
-
-const SF_INSTANCE_URL = process.env.SF_INSTANCE_URL || "";
-const SF_ACCESS_TOKEN = process.env.SF_ACCESS_TOKEN || "";
+import { getValidToken, handleTokenExpiry } from "@/lib/sf-auth";
 
 async function sfQuery(soql: string) {
-  if (!SF_INSTANCE_URL || !SF_ACCESS_TOKEN) return [];
+  const token = await getValidToken();
+  if (!token) return [];
 
-  const res = await fetch(
-    `${SF_INSTANCE_URL}/services/data/v59.0/query?q=${encodeURIComponent(soql)}`,
-    {
-      headers: {
-        Authorization: `Bearer ${SF_ACCESS_TOKEN}`,
-        "Content-Type": "application/json",
-      },
+  async function doQuery(accessToken: string, instanceUrl: string): Promise<Response> {
+    return fetch(
+      `${instanceUrl}/services/data/v59.0/query?q=${encodeURIComponent(soql)}`,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+  }
+
+  let res = await doQuery(token.accessToken, token.instanceUrl);
+
+  // Auto-refresh on 401 and retry
+  if (res.status === 401) {
+    const refreshed = await handleTokenExpiry();
+    if (refreshed) {
+      res = await doQuery(refreshed.accessToken, refreshed.instanceUrl);
+    } else {
+      throw new Error("SF token expired and refresh failed");
     }
-  );
+  }
 
   if (!res.ok) {
-    if (res.status === 401) throw new Error("SF token expired");
     throw new Error(`SF query failed: ${res.status}`);
   }
 
@@ -37,7 +49,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  if (!SF_ACCESS_TOKEN) {
+  const token = await getValidToken();
+  if (!token) {
     return NextResponse.json({ error: "Salesforce not configured", skipped: true });
   }
 
