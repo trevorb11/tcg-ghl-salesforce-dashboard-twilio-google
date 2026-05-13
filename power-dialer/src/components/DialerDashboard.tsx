@@ -151,9 +151,9 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
 
   useEffect(() => {
     if (sessionId && status !== "ended" && status !== "idle" && status !== "paused") {
-      // Poll faster during on_call so we catch merchant-initiated hangups
-      // (Twilio webhook → backend status="wrap_up") within ~1s instead of 2s.
-      const interval = status === "on_call" ? 1000 : 2000;
+      // Poll faster during on_call and dialing so we catch merchant hangups
+      // and voicemail detection (AnsweredBy=machine) within ~1s instead of 2s.
+      const interval = (status === "on_call" || status === "dialing") ? 1000 : 2000;
       pollRef.current = setInterval(pollStatus, interval);
       return () => { if (pollRef.current) clearInterval(pollRef.current); };
     }
@@ -215,12 +215,12 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
         const d = DISPOSITIONS[parseInt(e.key) - 1];
         if (d) { e.preventDefault(); handleDisposition(d.value); }
       }
-      // Space: Dial next (during connecting_rep or wrap_up)
-      if (e.code === "Space" && (status === "connecting_rep" || status === "wrap_up") && !autoAdvance) {
+      // Space: Dial next (during connecting_rep, wrap_up, or dialing)
+      if (e.code === "Space" && (status === "connecting_rep" || status === "wrap_up" || status === "dialing") && !autoAdvance) {
         e.preventDefault(); dialNext();
       }
-      // S: Skip lead (during dialing)
-      if (e.key === "s" && status === "dialing") { e.preventDefault(); skipLead(); }
+      // S: Skip lead (during dialing or wrap_up)
+      if (e.key === "s" && (status === "dialing" || status === "wrap_up")) { e.preventDefault(); skipLead(); }
       // P: Pause/Resume
       if (e.key === "p" && sessionId && status !== "idle" && status !== "ended") {
         e.preventDefault();
@@ -683,15 +683,30 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
                 </div>
               )}
 
-              {/* Call Ended banner — shown whenever we enter wrap_up so reps
-                  immediately know the merchant hung up (or the call otherwise ended) */}
-              {status === "wrap_up" && (
-                <div className="mb-3 p-3 bg-gray-800/60 border border-gray-700 rounded-lg flex items-center justify-center gap-2">
-                  <span className="text-gray-400 text-lg">📞</span>
-                  <span className="text-gray-200 font-semibold">Call Ended</span>
-                  <span className="text-gray-500 text-sm">— pick a disposition or dial next</span>
-                </div>
-              )}
+              {/* Call Ended banner — context-aware based on what happened */}
+              {status === "wrap_up" && (() => {
+                const lastCall = callLog.length > 0 ? callLog[callLog.length - 1] : null;
+                const dispo = lastCall?.disposition;
+                const isVoicemail = dispo === "voicemail";
+                const isNoAnswer = dispo === "no_answer" && lastCall?.status !== "in-progress";
+                const isBusy = lastCall?.status === "busy";
+                return (
+                  <div className={`mb-3 p-3 border rounded-lg flex items-center justify-center gap-2 ${
+                    isVoicemail ? "bg-purple-900/20 border-purple-800/40" :
+                    isNoAnswer || isBusy ? "bg-gray-800/60 border-gray-700" :
+                    "bg-gray-800/60 border-gray-700"
+                  }`}>
+                    <span className="text-lg">{isVoicemail ? "📱" : isNoAnswer ? "📵" : "📞"}</span>
+                    <span className="text-gray-200 font-semibold">
+                      {isVoicemail ? "Voicemail Detected" :
+                       isNoAnswer ? "No Answer" :
+                       isBusy ? "Line Busy" :
+                       "Call Ended"}
+                    </span>
+                    <span className="text-gray-500 text-sm">— pick a disposition or dial next</span>
+                  </div>
+                );
+              })()}
 
               {/* Dial Next / Skip buttons — always available during connecting_rep and wrap_up */}
               {(status === "connecting_rep" || status === "wrap_up") && (
@@ -721,9 +736,31 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
               )}
 
               {/* Dialing indicator */}
-              {status === "dialing" && (
+              {status === "dialing" && (() => {
+                // Check if the last call already resolved (voicemail/no-answer detected
+                // by Twilio AMD before the status transition propagates to the frontend)
+                const lastCall = callLog.length > 0 ? callLog[callLog.length - 1] : null;
+                const earlyVm = lastCall?.disposition === "voicemail" && lastCall?.status !== "in-progress";
+                const earlyNoAnswer = !earlyVm && lastCall?.status && ["no-answer", "busy", "failed", "canceled"].includes(lastCall.status);
+
+                return (
                 <div className="py-3">
-                  {dialMode === "multi" && dialingLeads.length > 1 ? (
+                  {earlyVm ? (
+                    <div className="text-center">
+                      <div className="w-10 h-10 mx-auto mb-2 rounded-full bg-purple-500/20 flex items-center justify-center">
+                        <span className="text-lg">📱</span>
+                      </div>
+                      <p className="text-purple-400 font-medium">Voicemail detected — {currentLead?.name}</p>
+                      <p className="text-gray-500 text-xs mt-1">Hit Drop VM or move to the next lead</p>
+                    </div>
+                  ) : earlyNoAnswer ? (
+                    <div className="text-center">
+                      <div className="w-10 h-10 mx-auto mb-2 rounded-full bg-gray-700 flex items-center justify-center">
+                        <span className="text-lg">📵</span>
+                      </div>
+                      <p className="text-gray-400 font-medium">{lastCall?.status === "busy" ? "Line busy" : "No answer"} — {currentLead?.name}</p>
+                    </div>
+                  ) : dialMode === "multi" && dialingLeads.length > 1 ? (
                     <div>
                       <p className="text-blue-400 font-semibold text-center mb-3">Ringing {dialingLeads.length} lines — first to answer connects</p>
                       <div className="grid gap-1.5">
@@ -754,7 +791,8 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
                     <button onClick={endCall} className="px-3 py-1.5 bg-red-600 hover:bg-red-500 hover:shadow-md hover:shadow-red-600/30 text-white text-xs font-bold rounded-lg transition-all duration-150 active:scale-95">Hang Up</button>
                   </div>
                 </div>
-              )}
+                );
+              })()}
 
               {/* On Call */}
               {status === "on_call" && (
