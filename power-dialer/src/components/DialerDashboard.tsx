@@ -495,7 +495,7 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
               "bg-gray-500"
             }`} />
             <span className="text-sm font-medium">
-              {status === "on_call" ? "Live Call" :
+              {status === "on_call" ? (callLog.length > 0 && callLog[callLog.length - 1]?.disposition === "voicemail" ? "Voicemail" : "Live Call") :
                status === "dialing" ? (dialMode === "multi" ? `Ringing ${linesCount} Lines` : "Ringing") :
                status === "connecting_rep" ? "Ready" :
                status === "wrap_up" ? "Wrap Up" :
@@ -795,17 +795,30 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
               })()}
 
               {/* On Call */}
-              {status === "on_call" && (
+              {status === "on_call" && (() => {
+                const lastCall = callLog.length > 0 ? callLog[callLog.length - 1] : null;
+                const isVoicemail = lastCall?.disposition === "voicemail";
+                return (
                 <div className="flex items-center justify-center gap-3 py-3">
-                  <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse" />
-                  <span className="text-green-400 font-medium">Live{dialMode === "multi" && currentLead ? ` with ${currentLead.name}` : ""}</span>
+                  {isVoicemail ? (
+                    <>
+                      <div className="w-3 h-3 bg-purple-500 rounded-full animate-pulse" />
+                      <span className="text-purple-400 font-medium">Voicemail{currentLead ? ` — ${currentLead.name}` : ""}</span>
+                    </>
+                  ) : (
+                    <>
+                      <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse" />
+                      <span className="text-green-400 font-medium">Live{dialMode === "multi" && currentLead ? ` with ${currentLead.name}` : ""}</span>
+                    </>
+                  )}
                   {connectionMode === "webrtc" && (
                     <button onClick={webrtc.toggleMute} className={`px-3 py-1.5 text-xs rounded-lg transition-all duration-150 active:scale-95 ${webrtc.isMuted ? "bg-red-600 text-white hover:bg-red-500" : "bg-gray-700 text-gray-300 hover:bg-gray-600"}`}>{webrtc.isMuted ? "Unmute" : "Mute"}</button>
                   )}
                   <button onClick={dropVoicemail} disabled={droppingVoicemail} className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 hover:shadow-md text-white text-xs rounded-lg transition-all duration-150 active:scale-95 disabled:opacity-60 disabled:active:scale-100">{droppingVoicemail ? "Dropping..." : "Drop VM"}</button>
                   <button onClick={endCall} className="px-4 py-1.5 bg-red-600 hover:bg-red-500 hover:shadow-md hover:shadow-red-600/30 text-white text-xs font-bold rounded-lg transition-all duration-150 active:scale-95">Hang Up</button>
                 </div>
-              )}
+                );
+              })()}
             </div>
           )}
 

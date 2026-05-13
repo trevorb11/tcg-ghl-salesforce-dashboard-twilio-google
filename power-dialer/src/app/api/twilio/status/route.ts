@@ -81,6 +81,14 @@ export async function POST(req: NextRequest) {
 
         // ── Call connected (in-progress) ───────────────────
         if (callStatus === "in-progress") {
+          // Flag voicemail early so the frontend can show "Voicemail" during
+          // the greeting (before the call completes). The rep still hears
+          // the greeting through the conference — we're just labeling it.
+          if (!callRecord.disposition && (answeredBy === "machine_start" || answeredBy === "machine_end_beep" || answeredBy === "machine_end_silence")) {
+            callRecord.disposition = "voicemail";
+            callRecord.answeredByMachine = true;
+          }
+
           // Multi-line mode: first to answer wins
           if (session.currentBatch && !session.currentBatch.settled) {
             const batch = session.currentBatch;

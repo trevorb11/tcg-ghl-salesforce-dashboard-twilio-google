@@ -86,6 +86,7 @@ export interface CallRecord {
   analysis?: CallAnalysis;
   twilioCallSid?: string;  // Call SID (works for both Twilio and SignalWire)
   carrier?: "twilio" | "signalwire"; // Which carrier handled this call
+  answeredByMachine?: boolean; // Twilio AMD flagged this as voicemail
   startedAt: string;
   endedAt?: string;
 }
