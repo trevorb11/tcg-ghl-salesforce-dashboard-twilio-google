@@ -331,8 +331,6 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
     }
 
     // Hang up the current call BEFORE recording the disposition.
-    // Prevents the previous call from overlapping with the auto-dialed next call
-    // (e.g. voicemail audio bleeding into the next ring).
     if (connectionMode === "webrtc") {
       webrtc.hangupCall();
     }
@@ -350,19 +348,16 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
       // Flash green to confirm disposition was recorded
       setDispoFlash(true); setTimeout(() => setDispoFlash(false), 600);
 
-      // Auto-advance: dial next after a pause to let the previous call
-      // fully tear down. 2500ms gives Twilio/SignalWire time to release
-      // the call leg so there's no audio bleed into the next call.
-      if (autoAdvance) {
-        setStatus("connecting_rep");
-        setDialInFlight(true); // block manual Dial Next clicks during the window
-        autoAdvanceTimerRef.current = setTimeout(() => {
-          setDialInFlight(false); // dialNext() will re-set it immediately
-          dialNext();
-        }, 2500);
-      } else {
-        setStatus("connecting_rep");
-      }
+      // ALWAYS auto-advance after disposition. Picking a dispo is the
+      // signal that the rep is done with this call. Wait for the call
+      // to tear down, then dial next automatically. This makes the flow
+      // one action: pick dispo → next call rings.
+      setStatus("connecting_rep");
+      setDialInFlight(true);
+      autoAdvanceTimerRef.current = setTimeout(() => {
+        setDialInFlight(false);
+        dialNext();
+      }, 1800);
     } catch (err: unknown) { setError(err instanceof Error ? err.message : "Failed to set disposition"); }
   }
 
@@ -683,7 +678,7 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
                 </div>
               )}
 
-              {/* Call Ended banner — context-aware based on what happened */}
+              {/* Call Ended banner — compact, context-aware */}
               {status === "wrap_up" && (() => {
                 const lastCall = callLog.length > 0 ? callLog[callLog.length - 1] : null;
                 const dispo = lastCall?.disposition;
@@ -691,47 +686,44 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
                 const isNoAnswer = dispo === "no_answer" && lastCall?.status !== "in-progress";
                 const isBusy = lastCall?.status === "busy";
                 return (
-                  <div className={`mb-3 p-3 border rounded-lg flex items-center justify-center gap-2 ${
-                    isVoicemail ? "bg-purple-900/20 border-purple-800/40" :
-                    isNoAnswer || isBusy ? "bg-gray-800/60 border-gray-700" :
-                    "bg-gray-800/60 border-gray-700"
+                  <div className={`mb-2 px-3 py-2 border rounded-lg flex items-center justify-center gap-2 text-sm ${
+                    isVoicemail ? "bg-purple-900/20 border-purple-800/40" : "bg-gray-800/60 border-gray-700"
                   }`}>
-                    <span className="text-lg">{isVoicemail ? "📱" : isNoAnswer ? "📵" : "📞"}</span>
-                    <span className="text-gray-200 font-semibold">
-                      {isVoicemail ? "Voicemail Detected" :
-                       isNoAnswer ? "No Answer" :
-                       isBusy ? "Line Busy" :
-                       "Call Ended"}
+                    <span>{isVoicemail ? "📱" : isNoAnswer ? "📵" : "📞"}</span>
+                    <span className="text-gray-300 font-medium">
+                      {isVoicemail ? "Voicemail" : isNoAnswer ? "No Answer" : isBusy ? "Busy" : "Call Ended"}
                     </span>
-                    <span className="text-gray-500 text-sm">— pick a disposition or dial next</span>
+                    <span className="text-gray-600">—</span>
+                    <span className="text-gray-500 text-xs">pick a disposition to dial next</span>
                   </div>
                 );
               })()}
 
-              {/* Dial Next / Skip buttons — always available during connecting_rep and wrap_up */}
-              {(status === "connecting_rep" || status === "wrap_up") && (
-                <div className="flex gap-2">
+              {/* Dial Next / Skip — shown during connecting_rep OR wrap_up when waiting */}
+              {status === "connecting_rep" && (
+                <div className="flex gap-2 mb-2">
                   <button
                     onClick={dialNext}
                     disabled={dialInFlight}
                     className="flex-1 py-3 bg-green-600 hover:bg-green-500 hover:shadow-lg hover:shadow-green-600/20 disabled:bg-gray-700 disabled:text-gray-400 disabled:cursor-not-allowed disabled:active:scale-100 text-white text-lg font-bold rounded-xl transition-all duration-150 active:scale-[0.97]"
                   >
                     {dialInFlight
-                      ? "Preparing next call…"
+                      ? "Dialing next…"
                       : <>Dial Next <span className="text-green-300 text-sm ml-1">(Space)</span></>}
                   </button>
-                  {nextLead && (
-                    <button onClick={skipLead} className="px-4 py-3 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-xl text-sm font-medium transition-all duration-150 active:scale-95">
-                      Skip (S)
-                    </button>
-                  )}
                 </div>
               )}
 
-              {/* Auto-advancing hint */}
-              {status === "wrap_up" && autoAdvance && (
-                <div className="text-center py-2">
-                  <p className="text-gray-500 text-xs">Auto-dialing next lead after disposition...</p>
+              {/* During wrap_up: Dial Next is secondary — dispo buttons are the primary action */}
+              {status === "wrap_up" && (
+                <div className="flex gap-2 mb-2">
+                  <button
+                    onClick={dialNext}
+                    disabled={dialInFlight}
+                    className="flex-1 py-2 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:text-gray-500 text-gray-300 text-sm font-medium rounded-lg transition-all duration-150 active:scale-95"
+                  >
+                    {dialInFlight ? "Dialing next…" : "Skip — Dial Next (Space)"}
+                  </button>
                 </div>
               )}
 
