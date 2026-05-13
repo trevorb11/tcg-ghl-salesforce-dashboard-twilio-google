@@ -50,6 +50,27 @@ export default function Home() {
   const [autoError, setAutoError] = useState<string | null>(null);
   const [dialNumber, setDialNumber] = useState<string | null>(null);
 
+  // Listen for postMessage from the Chrome extension side panel.
+  // This lets the extension pass a dial number without reloading the iframe
+  // (which would destroy auth state and log the rep out).
+  useEffect(() => {
+    function handleExtensionMessage(event: MessageEvent) {
+      if (event.data?.type === "TCG_DIAL_NUMBER" && event.data.phone) {
+        setDialNumber(event.data.phone);
+        // If already logged in and on load_leads screen, the LeadLoader
+        // will pick up the new dialNumber via its prop. If on dialer screen,
+        // navigate back to load_leads so the dialpad opens.
+        if (rep && screen === "dialer") {
+          setLeads([]);
+          setAutoSessionId(null);
+          setScreen("load_leads");
+        }
+      }
+    }
+    window.addEventListener("message", handleExtensionMessage);
+    return () => window.removeEventListener("message", handleExtensionMessage);
+  }, [rep, screen]);
+
   // On mount: check for ?token= auto-login and ?dialNumber= click-to-dial
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
