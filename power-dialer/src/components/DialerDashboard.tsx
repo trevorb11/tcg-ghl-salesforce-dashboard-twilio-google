@@ -22,8 +22,8 @@ interface CallAnalysis {
   leadSentiment: "positive" | "neutral" | "negative"; ghlNote: string;
 }
 interface CallLogEntry {
-  id: string; leadName: string; leadBusinessName: string; status: string;
-  disposition?: string; duration?: number; startedAt: string;
+  id: string; leadId?: string; leadName: string; leadBusinessName: string; leadPhone?: string;
+  status: string; disposition?: string; duration?: number; startedAt: string;
   analysis?: CallAnalysis | null; recordingUrl?: string | null; recordingSid?: string | null;
 }
 interface DailySummary {
@@ -1007,6 +1007,23 @@ export default function DialerDashboard({ rep, leads, onEnd, sessionId: initialS
                     </div>
                     {expandedCallId === entry.id && (
                       <div className="mt-2 pt-2 border-t border-gray-700 text-xs space-y-2">
+                        {/* Call Back button */}
+                        {entry.leadPhone && status !== "on_call" && status !== "dialing" && (
+                          <button
+                            onClick={e => {
+                              e.stopPropagation();
+                              if (connectionMode === "webrtc" && webrtc.isConnected) {
+                                webrtc.hangupCall();
+                                setCurrentLead({ id: entry.leadId || "", name: entry.leadName, businessName: entry.leadBusinessName, phone: entry.leadPhone || "", email: "", stageName: "" });
+                                setStatus("dialing");
+                                setTimeout(() => webrtc.makeCall(entry.leadPhone!), 800);
+                              }
+                            }}
+                            className="w-full py-1.5 bg-green-600/20 hover:bg-green-600/40 text-green-300 rounded text-xs font-medium transition-all duration-150 active:scale-95 flex items-center justify-center gap-1.5"
+                          >
+                            <span>📞</span> Call Back {entry.leadName.split(" ")[0]}
+                          </button>
+                        )}
                         {entry.recordingUrl && (
                           <button onClick={e => { e.stopPropagation(); toggleRecording(entry); }} className={`w-full py-1.5 rounded text-xs font-medium ${playingRecordingId === entry.id ? "bg-red-600/30 text-red-300" : "bg-green-600/20 text-green-300"}`}>
                             {playingRecordingId === entry.id ? "Stop" : "Play Recording"}

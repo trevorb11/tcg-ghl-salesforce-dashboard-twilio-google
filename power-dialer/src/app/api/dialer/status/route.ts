@@ -94,8 +94,10 @@ export async function GET(req: NextRequest) {
     abandonedCalls: session.abandonedCalls || 0,
     callLog: session.callLog.map((c) => ({
       id: c.id,
+      leadId: c.leadId,
       leadName: c.leadName,
       leadBusinessName: c.leadBusinessName,
+      leadPhone: c.leadPhone,
       status: c.status,
       disposition: c.disposition || null,
       duration: c.duration || null,
